@@ -10,7 +10,10 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins("http://localhost:5173") // 允許的前端來源
+                .allowedOriginPatterns(
+                        "http://localhost:5173", // 本地開發的前端來源
+                        "https://vue3-project-3pmrozgyt-faithfulman-hsiehs-projects.vercel.app" // 部署後的前端來源
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // 允許的 HTTP 方法
                 .allowedHeaders("*"); // 允許的請求頭
     }
