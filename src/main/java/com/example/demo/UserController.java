@@ -1,39 +1,33 @@
 package com.example.demo;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api")
 public class UserController {
 
-    private final String[] names = {
-            "John Doe", "Jane Smith", "Alice Johnson", "Bob Brown",
-            "Charlie Davis", "David Wilson", "Eva Adams", "Fiona Green",
-            "George Black", "Hannah White"
-    };
+    @Autowired
+    private UserRepository userRepository; // 使用 H2 資料庫的 repository 來進行操作
 
+    // 調整後的 getUsers 方法，從 H2 資料庫中獲取用戶資料
     @GetMapping("/users")
     public List<User> getUsers(HttpServletRequest request) {
         // 記錄訪問者的 IP 地址
         String clientIp = request.getRemoteAddr();
         System.out.println("Accessed by IP: " + clientIp);
 
-        // 隨機生成 10 筆用戶資料
-        List<User> users = new ArrayList<>();
-        Random random = new Random();
-        for (int i = 0; i < 10; i++) {
-            int id = i + 1;
-            String name = names[random.nextInt(names.length)];
-            String email = name.toLowerCase().replace(" ", ".") + "@example.com";
-            users.add(new User(id, name, email));
+        // 從 H2 資料庫中獲取用戶列表
+        List<User> users = userRepository.findAll();
+
+        // 如果 H2 資料庫中沒有用戶資料，就返回空列表
+        if (users.isEmpty()) {
+            users = new ArrayList<>();
+            System.out.println("No users found in H2.");
         }
 
         // 記錄回傳的 JSON 格式
@@ -46,5 +40,15 @@ public class UserController {
         }
 
         return users; // 回傳用戶資料
+    }
+
+    // 調整後的 addUser 方法，將用戶資料新增到 H2 資料庫
+    @PostMapping("/addUser")
+    public String addUser(@RequestBody User newUser) {
+        // 將新用戶存入 H2 資料庫
+        userRepository.save(newUser);
+
+        System.out.println("Added new user: " + newUser.getName() + ", Email: " + newUser.getEmail());
+        return "User added successfully!";
     }
 }
