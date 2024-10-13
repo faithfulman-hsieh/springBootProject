@@ -26,7 +26,8 @@ public class WebConfig implements WebMvcConfigurer {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true); // 允許攜帶憑證
-        config.addAllowedOrigin("http://localhost:5173"); // 允許的來源
+        config.addAllowedOriginPattern("http://localhost:5173"); // 允許的來源
+        config.addAllowedOriginPattern("https://vue3-project-faithfulman.vercel.app"); // 允許的來源
         config.addAllowedHeader("*"); // 允許的標頭
         config.addAllowedMethod("*"); // 允許的請求方法
         source.registerCorsConfiguration("/**", config);
