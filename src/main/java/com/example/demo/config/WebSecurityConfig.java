@@ -12,6 +12,7 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableMethodSecurity(prePostEnabled = true)
@@ -40,7 +41,8 @@ public class WebSecurityConfig {
                 .httpBasic(Customizer.withDefaults())  // 允許 Basic Auth，供 Postman 使用
                 .formLogin(Customizer.withDefaults()) // 啟用預設登錄表單
                 .logout(logout -> logout.logoutUrl("/logout") // 登出所使用的url
-                        .permitAll());
+                        .permitAll())
+                .addFilterBefore(new RequestLogFilter(), UsernamePasswordAuthenticationFilter.class); // 加入自定義過濾器
 
         return http.build();
     }
