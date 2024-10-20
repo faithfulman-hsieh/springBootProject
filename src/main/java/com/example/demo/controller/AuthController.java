@@ -1,5 +1,7 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.AuthRequest;
+import com.example.demo.util.JwtUtil;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -12,37 +14,27 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
+    private final JwtUtil jwtUtil; // 新增 JwtUtil 的依賴
 
-    public AuthController(AuthenticationManager authenticationManager) {
+    public AuthController(AuthenticationManager authenticationManager, JwtUtil jwtUtil) {
         this.authenticationManager = authenticationManager;
+        this.jwtUtil = jwtUtil;
     }
 
     @PostMapping("/login")
     public String login(@RequestBody AuthRequest authRequest, HttpSession session) {
+        // 進行驗證
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(authRequest.getUsername(), authRequest.getPassword()));
 
+        // 如果驗證成功，將 Authentication 放入安全上下文
         SecurityContextHolder.getContext().setAuthentication(authentication);
         System.out.println("Session ID: " + session.getId());
-        return "登入成功";
-    }
-}
 
-class AuthRequest {
-    private String username;
-    private String password;
+        // 使用 JwtUtil 生成 Token
+        String jwtToken = jwtUtil.generateToken(authRequest.getUsername());
 
-    public String getUsername() {
-        return username;
-    }
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-    public void setPassword(String password) {
-        this.password = password;
+        // 返回 Token
+        return jwtToken;
     }
 }
