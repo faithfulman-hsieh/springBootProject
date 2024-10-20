@@ -29,10 +29,10 @@ public class AuthController {
 
         // 如果驗證成功，將 Authentication 放入安全上下文
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        System.out.println("Session ID: " + session.getId());
 
         // 使用 JwtUtil 生成 Token
         String jwtToken = jwtUtil.generateToken(authRequest.getUsername());
+        System.out.println("jwtToken : " + jwtToken);
 
         // 返回 Token
         return jwtToken;

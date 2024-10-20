@@ -34,7 +34,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             jwt = authHeader.substring(7);
+            // 紀錄請求的 URL 和 HTTP 方法
             username = jwtUtil.extractUsername(jwt);
+            System.out.println("User Name: " + username + " JWT: " + jwt);
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {

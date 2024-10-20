@@ -18,7 +18,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "https://vue3-project-faithfulman.vercel.app/" // 部署後的前端來源
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // 允許的 HTTP 方法
-                .allowedHeaders("*"); // 允許的請求頭
+                .allowedHeaders("*") // 允許的請求頭
+                .allowCredentials(true); // 允許攜帶憑證
     }
 
     @Bean
@@ -33,4 +34,5 @@ public class WebConfig implements WebMvcConfigurer {
         source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
     }
+
 }
