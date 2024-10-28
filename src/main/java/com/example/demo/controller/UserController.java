@@ -1,12 +1,20 @@
 package com.example.demo.controller;
 
-import com.example.demo.model.User;
+import com.example.demo.model.Role;
+import com.example.demo.repository.RoleRepository;
 import com.example.demo.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
+import com.example.demo.model.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
@@ -15,6 +23,12 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository; // 使用 H2 資料庫的 repository 來進行操作
+    @Autowired
+    private RoleRepository roleRepository; // 使用 H2 資料庫的 repository 來進行操作
+
+    // BCryptPasswordEncoder 用於加密密碼
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
 
     // 調整後的 getUsers 方法，從 H2 資料庫中獲取用戶資料
     @GetMapping("/users")
@@ -44,13 +58,24 @@ public class UserController {
         return users; // 回傳用戶資料
     }
 
-    // 調整後的 addUser 方法，將用戶資料新增到 H2 資料庫
     @PostMapping("/addUser")
-    public String addUser(@RequestBody User newUser) {
-        // 將新用戶存入 H2 資料庫
-        userRepository.save(newUser);
+    public ResponseEntity<String> addUser(@RequestBody User newUser) {
+        Set<Role> rolesToAssign = new HashSet<>();
 
-        System.out.println("Added new user: " + newUser.getName() + ", Email: " + newUser.getEmail());
-        return "User added successfully!";
+        // 加密密碼
+        String encodedPassword = passwordEncoder.encode(newUser.getPassword());
+        newUser.setPassword(encodedPassword); // 設置加密後的密碼
+
+        // 遍歷新用戶的角色，確保不會重複添加相同角色
+        for (Role role : newUser.getRoles()) {
+            Role foundRole = roleRepository.findById(role.getId())
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid role ID: " + role.getId()));
+            rolesToAssign.add(foundRole);
+        }
+
+        // 設置用戶的角色
+        newUser.setRoles(rolesToAssign);
+        userRepository.save(newUser);
+        return ResponseEntity.ok("User added successfully!");
     }
 }
