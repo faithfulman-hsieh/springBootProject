@@ -1,6 +1,6 @@
-package com.example.demo.repository;
+package com.taskmanager.account.adapter.out.repository;
 
-import com.example.demo.model.Role;
+import com.taskmanager.account.model.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface RoleRepository extends JpaRepository<Role, Long> {

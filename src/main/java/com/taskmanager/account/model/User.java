@@ -1,5 +1,5 @@
 // User.java
-package com.example.demo.model;
+package com.taskmanager.account.model;
 
 import jakarta.persistence.*;
 import lombok.Getter;

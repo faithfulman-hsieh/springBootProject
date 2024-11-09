@@ -1,6 +1,5 @@
-package com.example.demo;
+package com.taskmanager.util;
 
-import com.example.demo.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

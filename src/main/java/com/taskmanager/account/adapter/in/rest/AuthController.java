@@ -1,7 +1,7 @@
-package com.example.demo.controller;
+package com.taskmanager.account.adapter.in.rest;
 
-import com.example.demo.dto.AuthRequest;
-import com.example.demo.util.JwtUtil;
+import com.taskmanager.account.dto.AuthRequest;
+import com.taskmanager.util.JwtUtil;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;

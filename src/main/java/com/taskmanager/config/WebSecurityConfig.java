@@ -1,8 +1,8 @@
-package com.example.demo.config;
+package com.taskmanager.config;
 
-import com.example.demo.model.User;
-import com.example.demo.repository.UserRepository;
-import com.example.demo.util.JwtUtil;
+import com.taskmanager.account.model.User;
+import com.taskmanager.account.adapter.out.repository.AccountRepository;
+import com.taskmanager.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,7 +33,7 @@ public class WebSecurityConfig {
     private final JwtUtil jwtUtil;
 
     @Autowired
-    private UserRepository userRepository;
+    private AccountRepository accountRepository;
 
     public WebSecurityConfig(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;
@@ -71,7 +71,7 @@ public class WebSecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            User user = userRepository.findByName(username)
+            User user = accountRepository.findByName(username)
                     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
             return new org.springframework.security.core.userdetails.User(
                     user.getName(),

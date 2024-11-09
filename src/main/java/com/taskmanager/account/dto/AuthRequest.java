@@ -1,4 +1,4 @@
-package com.example.demo.dto;
+package com.taskmanager.account.dto;
 
 public class AuthRequest {
     private String username;

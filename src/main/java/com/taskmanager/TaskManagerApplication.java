@@ -1,9 +1,9 @@
-package com.example.demo;
+package com.taskmanager;
 
-import com.example.demo.model.Role;
-import com.example.demo.model.User;
-import com.example.demo.repository.RoleRepository;
-import com.example.demo.repository.UserRepository;
+import com.taskmanager.account.model.Role;
+import com.taskmanager.account.model.User;
+import com.taskmanager.account.adapter.out.repository.RoleRepository;
+import com.taskmanager.account.adapter.out.repository.AccountRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -11,15 +11,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @SpringBootApplication
-public class DemoApplication {
+public class TaskManagerApplication {
 
 
 	public static void main(String[] args) {
-		SpringApplication.run(DemoApplication.class, args);
+		SpringApplication.run(TaskManagerApplication.class, args);
 	}
 
 	@Bean
-	public CommandLineRunner run(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+	public CommandLineRunner run(AccountRepository accountRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
 		return args -> {
 			// 創建角色
 			Role userRole = new Role("ROLE_USER");
@@ -30,15 +30,15 @@ public class DemoApplication {
 			// 創建用戶並設置角色
 			User user = new User("user", "user@example.com", passwordEncoder.encode("user"));
 			user.getRoles().add(userRole);
-			userRepository.save(user);
+			accountRepository.save(user);
 
 			User admin = new User("admin", "admin@example.com", passwordEncoder.encode("admin"));
 			admin.getRoles().add(adminRole);
-			userRepository.save(admin);
+			accountRepository.save(admin);
 
 			// 使用 findAll() 印出所有用戶和角色
 			System.out.println("Users:");
-			userRepository.findAll().forEach(System.out::println);
+			accountRepository.findAll().forEach(System.out::println);
 
 			System.out.println("Roles:");
 			roleRepository.findAll().forEach(System.out::println);

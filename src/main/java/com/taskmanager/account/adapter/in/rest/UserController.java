@@ -1,8 +1,9 @@
-package com.example.demo.controller;
+package com.taskmanager.account.adapter.in.rest;
 
-import com.example.demo.model.Role;
-import com.example.demo.repository.RoleRepository;
-import com.example.demo.repository.UserRepository;
+import com.taskmanager.account.model.Role;
+import com.taskmanager.account.adapter.out.repository.RoleRepository;
+import com.taskmanager.account.adapter.out.repository.AccountRepository;
+import com.taskmanager.account.model.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +15,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.example.demo.model.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
@@ -22,7 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class UserController {
 
     @Autowired
-    private UserRepository userRepository; // 使用 H2 資料庫的 repository 來進行操作
+    private AccountRepository accountRepository; // 使用 H2 資料庫的 repository 來進行操作
     @Autowired
     private RoleRepository roleRepository; // 使用 H2 資料庫的 repository 來進行操作
 
@@ -38,7 +38,7 @@ public class UserController {
         System.out.println("Accessed by IP: " + clientIp);
 
         // 從 H2 資料庫中獲取用戶列表
-        List<User> users = userRepository.findAll();
+        List<User> users = accountRepository.findAll();
 
         // 如果 H2 資料庫中沒有用戶資料，就返回空列表
         if (users.isEmpty()) {
@@ -75,7 +75,7 @@ public class UserController {
 
         // 設置用戶的角色
         newUser.setRoles(rolesToAssign);
-        userRepository.save(newUser);
+        accountRepository.save(newUser);
         return ResponseEntity.ok("User added successfully!");
     }
 }

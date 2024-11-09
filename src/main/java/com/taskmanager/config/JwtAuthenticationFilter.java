@@ -1,6 +1,6 @@
-package com.example.demo.config;
+package com.taskmanager.config;
 
-import com.example.demo.util.JwtUtil;
+import com.taskmanager.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

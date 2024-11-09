@@ -1,5 +1,5 @@
 // Role.java
-package com.example.demo.model;
+package com.taskmanager.account.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
