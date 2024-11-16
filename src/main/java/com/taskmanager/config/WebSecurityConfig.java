@@ -1,7 +1,7 @@
 package com.taskmanager.config;
 
 import com.taskmanager.account.model.User;
-import com.taskmanager.account.adapter.out.repository.AccountRepository;
+import com.taskmanager.account.adapter.out.repository.UserRepository;
 import com.taskmanager.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -33,7 +33,7 @@ public class WebSecurityConfig {
     private final JwtUtil jwtUtil;
 
     @Autowired
-    private AccountRepository accountRepository;
+    private UserRepository userRepository;
 
     public WebSecurityConfig(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;
@@ -71,7 +71,7 @@ public class WebSecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            User user = accountRepository.findByName(username)
+            User user = userRepository.findByName(username)
                     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
             return new org.springframework.security.core.userdetails.User(
                     user.getName(),
