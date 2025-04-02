@@ -86,6 +86,13 @@
 			<version>1.18.30</version> <!-- 確保使用最新版本 -->
 			<scope>provided</scope>
 		</dependency>
+		<!-- activiti -->
+		<dependency>
+			<groupId>org.activiti</groupId>
+			<artifactId>activiti-spring-boot-starter</artifactId>
+			<version>7.1.0.M6</version>
+		</dependency>
+
 	</dependencies>
 	<build>
 		<plugins>

@@ -4,6 +4,7 @@ import com.taskmanager.account.model.Role;
 import com.taskmanager.account.model.User;
 import com.taskmanager.account.adapter.out.repository.RoleRepository;
 import com.taskmanager.account.adapter.out.repository.UserRepository;
+import org.activiti.spring.boot.ProcessEngineAutoConfiguration;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:activiti="http://activiti.org/bpmn" xmlns:flowable="http://flowable.org/bpmn" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_0njwgtx" targetNamespace="http://bpmn.io/schema/bpmn" exporter="BPMN Modeler" exporterVersion="5.0.0">
+  <!-- 流程定義 -->
+  <bpmn:process id="todoProcess" name="todoProcess" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_1">
+      <bpmn:outgoing>Flow_StartToAutoAssign</bpmn:outgoing>
+    </bpmn:startEvent>
+    <!-- 多引擎兼容的服務任務定義-->
+    <bpmn:serviceTask id="AutoAssignTask" name="自動分派" activiti:class="com.taskmanager.workflow.task.AutoAssignTask">
+      <bpmn:extensionElements>
+        <flowable:class>com.taskmanager.workflow.task.AutoAssignTask</flowable:class>
+        <camunda:class>com.taskmanager.workflow.task.AutoAssignTask</camunda:class>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_StartToAutoAssign</bpmn:incoming>
+      <bpmn:outgoing>Flow_AutoAssignToProcessTask</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_StartToAutoAssign" sourceRef="StartEvent_1" targetRef="AutoAssignTask"/>
+    <bpmn:userTask id="ProcessTask" name="處理待辦">
+      <bpmn:incoming>Flow_AutoAssignToProcessTask</bpmn:incoming>
+      <bpmn:incoming>Flow_BackToProcessTask</bpmn:incoming>
+      <bpmn:incoming>Flow_FromConfirmTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_ProcessTaskToDecisionGateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_AutoAssignToProcessTask" sourceRef="AutoAssignTask" targetRef="ProcessTask"/>
+    <bpmn:exclusiveGateway id="DecisionGateway">
+      <bpmn:incoming>Flow_ProcessTaskToDecisionGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_BackToProcessTask</bpmn:outgoing>
+      <bpmn:outgoing>Flow_DecisionToConfirmTask</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ProcessTaskToDecisionGateway" sourceRef="ProcessTask" targetRef="DecisionGateway"/>
+    <bpmn:sequenceFlow id="Flow_BackToProcessTask" sourceRef="DecisionGateway" targetRef="ProcessTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reassign'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_DecisionToConfirmTask" sourceRef="DecisionGateway" targetRef="ConfirmTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'complete'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:exclusiveGateway id="ConfirmDecisionGateway">
+      <bpmn:incoming>Flow_ConfirmTaskToDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_FromConfirmTask</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToReviewGateway</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ConfirmTaskToDecision" sourceRef="ConfirmTask" targetRef="ConfirmDecisionGateway"/>
+    <bpmn:sequenceFlow id="Flow_FromConfirmTask" sourceRef="ConfirmDecisionGateway" targetRef="ProcessTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reject'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToReviewGateway" sourceRef="ConfirmDecisionGateway" targetRef="PriorityGateway">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'confirm'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:userTask id="ConfirmTask" name="確認待辦">
+      <bpmn:incoming>Flow_DecisionToConfirmTask</bpmn:incoming>
+      <bpmn:incoming>Flow_FromReviewTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_ConfirmTaskToDecision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="PriorityGateway">
+      <bpmn:incoming>Flow_ToReviewGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToReviewTask</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToEndEvent</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ToReviewTask" sourceRef="PriorityGateway" targetRef="ReviewTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${priority == 'high'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToEndEvent" sourceRef="ReviewDecisionGateway" targetRef="EndEvent">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:userTask id="ReviewTask" name="審閱待辦">
+      <bpmn:incoming>Flow_ToReviewTask</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReviewTaskToDecision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="ReviewDecisionGateway">
+      <bpmn:incoming>Flow_ReviewTaskToDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_FromReviewTask</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToEndEvent</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ReviewTaskToDecision" sourceRef="ReviewTask" targetRef="ReviewDecisionGateway"/>
+    <bpmn:sequenceFlow id="Flow_FromReviewTask" sourceRef="ReviewDecisionGateway" targetRef="ConfirmTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reject'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ToEndEventFromReview" sourceRef="PriorityGateway" targetRef="EndEvent">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${priority != 'high'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:endEvent id="EndEvent">
+      <bpmn:incoming>Flow_ToEndEvent</bpmn:incoming>
+      <bpmn:incoming>Flow_ToEndEventFromReview</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <!-- BPMN 圖形定義 (保持不變) -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="todoProcess">
+      <!-- 開始事件的圖形 -->
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="182" y="162" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <!-- 自動分派任務的圖形 -->
+      <bpmndi:BPMNShape id="AutoAssignTask_di" bpmnElement="AutoAssignTask">
+        <dc:Bounds x="270" y="140" width="100" height="80"/>
+        <bpmndi:BPMNLabel/>
+      </bpmndi:BPMNShape>
+      <!-- 處理待辦任務的圖形 -->
+      <bpmndi:BPMNShape id="ProcessTask_di" bpmnElement="ProcessTask">
+        <dc:Bounds x="430" y="140" width="100" height="80"/>
+        <bpmndi:BPMNLabel/>
+      </bpmndi:BPMNShape>
+      <!-- 決策閘道的圖形 -->
+      <bpmndi:BPMNShape id="DecisionGateway_di" bpmnElement="DecisionGateway" isMarkerVisible="true">
+        <dc:Bounds x="595" y="155" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <!-- 確認決策閘道的圖形 -->
+      <bpmndi:BPMNShape id="ConfirmDecisionGateway_di" bpmnElement="ConfirmDecisionGateway" isMarkerVisible="true">
+        <dc:Bounds x="875" y="155" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <!-- 確認待辦任務的圖形 -->
+      <bpmndi:BPMNShape id="ConfirmTask_di" bpmnElement="ConfirmTask">
+        <dc:Bounds x="710" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <!-- 審閱閘道的圖形 -->
+      <bpmndi:BPMNShape id="ReviewGateway_di" bpmnElement="PriorityGateway" isMarkerVisible="true">
+        <dc:Bounds x="995" y="155" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <!-- 審閱待辦任務的圖形 -->
+      <bpmndi:BPMNShape id="ReviewTask_di" bpmnElement="ReviewTask">
+        <dc:Bounds x="970" y="260" width="100" height="80"/>
+        <bpmndi:BPMNLabel/>
+      </bpmndi:BPMNShape>
+      <!-- 審閱決策閘道的圖形 -->
+      <bpmndi:BPMNShape id="ReviewDecisionGateway_di" bpmnElement="ReviewDecisionGateway" isMarkerVisible="true">
+        <dc:Bounds x="735" y="275" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <!-- 結束事件的圖形 -->
+      <bpmndi:BPMNShape id="EndEvent_di" bpmnElement="EndEvent">
+        <dc:Bounds x="742" y="372" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <!-- 關聯：確認決策閘道與文字註解的圖形 -->
+      <bpmndi:BPMNEdge id="Association_ConfirmDecision_di" bpmnElement="Association_ConfirmDecision">
+        <di:waypoint x="913" y="168"/>
+        <di:waypoint x="963" y="118"/>
+      </bpmndi:BPMNEdge>
+      <!-- 關聯：決策閘道與文字註解的圖形 -->
+      <bpmndi:BPMNEdge id="Association_ProcessDecision_di" bpmnElement="Association_ProcessDecision">
+        <di:waypoint x="631" y="166"/>
+        <di:waypoint x="667" y="118"/>
+      </bpmndi:BPMNEdge>
+      <!-- 關聯：審閱閘道與文字註解的圖形 -->
+      <bpmndi:BPMNEdge id="Association_ReviewDecision_di" bpmnElement="Association_ReviewDecision">
+        <di:waypoint x="1035" y="170"/>
+        <di:waypoint x="1119" y="118"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從開始事件到自動分派任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_StartToAutoAssign_di" bpmnElement="Flow_StartToAutoAssign">
+        <di:waypoint x="218" y="180"/>
+        <di:waypoint x="270" y="180"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從自動分派任務到處理待辦任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_AutoAssignToProcessTask_di" bpmnElement="Flow_AutoAssignToProcessTask">
+        <di:waypoint x="370" y="180"/>
+        <di:waypoint x="430" y="180"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從處理待辦任務到決策閘道的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ProcessTaskToDecisionGateway_di" bpmnElement="Flow_ProcessTaskToDecisionGateway">
+        <di:waypoint x="530" y="180"/>
+        <di:waypoint x="595" y="180"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從決策閘道回到處理待辦任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_BackToProcessTask_di" bpmnElement="Flow_BackToProcessTask">
+        <di:waypoint x="620" y="205"/>
+        <di:waypoint x="620" y="270"/>
+        <di:waypoint x="480" y="270"/>
+        <di:waypoint x="480" y="220"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從決策閘道到確認待辦任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_DecisionToConfirmTask_di" bpmnElement="Flow_DecisionToConfirmTask">
+        <di:waypoint x="645" y="180"/>
+        <di:waypoint x="710" y="180"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從確認待辦任務到確認決策閘道的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ConfirmTaskToDecision_di" bpmnElement="Flow_ConfirmTaskToDecision">
+        <di:waypoint x="810" y="180"/>
+        <di:waypoint x="875" y="180"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從確認決策閘道回到處理待辦任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_FromConfirmTask_di" bpmnElement="Flow_FromConfirmTask">
+        <di:waypoint x="900" y="155"/>
+        <di:waypoint x="900" y="50"/>
+        <di:waypoint x="480" y="50"/>
+        <di:waypoint x="480" y="140"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從確認決策閘道到審閱閘道的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ToReviewGateway_di" bpmnElement="Flow_ToReviewGateway">
+        <di:waypoint x="925" y="180"/>
+        <di:waypoint x="995" y="180"/>
+      </bpmndi:BPMNEdge>
+      <!-- 文字註解：確認待辦是否完成的圖形 -->
+      <bpmndi:BPMNShape id="TextAnnotation_ConfirmDecision_di" bpmnElement="TextAnnotation_ConfirmDecision">
+        <dc:Bounds x="940" y="77" width="130" height="41"/>
+        <bpmndi:BPMNLabel/>
+      </bpmndi:BPMNShape>
+      <!-- 從審閱閘道到審閱待辦任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ToReviewTask_di" bpmnElement="Flow_ToReviewTask">
+        <di:waypoint x="1020" y="205"/>
+        <di:waypoint x="1020" y="260"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從審閱待辦任務到審閱決策閘道的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ReviewTaskToDecision_di" bpmnElement="Flow_ReviewTaskToDecision">
+        <di:waypoint x="970" y="300"/>
+        <di:waypoint x="785" y="300"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從審閱決策閘道回到確認待辦任務的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_FromReviewTask_di" bpmnElement="Flow_FromReviewTask">
+        <di:waypoint x="760" y="275"/>
+        <di:waypoint x="760" y="220"/>
+      </bpmndi:BPMNEdge>
+      <!-- 從審閱決策閘道到結束事件的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ToEndEvent_di" bpmnElement="Flow_ToEndEvent">
+        <di:waypoint x="760" y="325"/>
+        <di:waypoint x="760" y="372"/>
+      </bpmndi:BPMNEdge>
+      <!-- 文字註解：是否處理完成，或指派下一個處理人員的圖形 -->
+      <bpmndi:BPMNShape id="TextAnnotation_ProcessDecision_di" bpmnElement="TextAnnotation_ProcessDecision">
+        <dc:Bounds x="630" y="77" width="150" height="41"/>
+        <bpmndi:BPMNLabel/>
+      </bpmndi:BPMNShape>
+      <!-- 從審閱閘道到結束事件的流程圖形 -->
+      <bpmndi:BPMNEdge id="Flow_ToEndEventFromReview_di" bpmnElement="Flow_ToEndEventFromReview">
+        <di:waypoint x="1045" y="180"/>
+        <di:waypoint x="1120" y="180"/>
+        <di:waypoint x="1120" y="390"/>
+        <di:waypoint x="778" y="390"/>
+      </bpmndi:BPMNEdge>
+      <!-- 文字註解：重要程度高的待辦須經主管審閱的圖形 -->
+      <bpmndi:BPMNShape id="TextAnnotation_ReviewDecision_di" bpmnElement="TextAnnotation_ReviewDecision">
+        <dc:Bounds x="1110" y="77" width="150" height="41"/>
+        <bpmndi:BPMNLabel/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
