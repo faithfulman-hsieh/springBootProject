@@ -7,6 +7,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/todos")
 public class TodoController {
@@ -17,8 +19,15 @@ public class TodoController {
         this.todoService = todoService;
     }
 
+    // 取得所有 Todo
+    @GetMapping
+    public ResponseEntity<List<Todo>> getAllTodos() {
+        List<Todo> todos = todoService.getAllTodos();
+        return ResponseEntity.ok(todos);
+    }
+
     // 建立 Todo
-    @PostMapping
+    @PostMapping("/addTodo")
     public ResponseEntity<Todo> createTodo(@RequestBody TodoRequest request) {
         Todo createdTodo = todoService.createTodo(request);
         return ResponseEntity.ok(createdTodo);

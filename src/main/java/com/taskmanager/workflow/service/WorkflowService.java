@@ -25,7 +25,7 @@ public class WorkflowService {
     public String startProcess(String assignee) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("assignee", assignee);
-        return runtimeService.startProcessInstanceByKey("todoProcess", variables).getId();
+        return runtimeService.startProcessInstanceByKey("todoProcess", variables).getProcessInstanceId();
     }
 
     /**
@@ -34,6 +34,15 @@ public class WorkflowService {
     public List<String> getUserTasks(String assignee) {
         List<Task> tasks = taskService.createTaskQuery().taskAssignee(assignee).list();
         return tasks.stream().map(Task::getName).collect(Collectors.toList());
+    }
+
+    /**
+     * 查詢目前 ProcessInstance 的 Task
+     */
+    public Task getCurrentTask(String processInstanceId) {
+        return taskService.createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
     }
 
     /**
