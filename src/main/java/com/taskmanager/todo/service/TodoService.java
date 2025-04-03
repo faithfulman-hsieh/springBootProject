@@ -33,7 +33,7 @@ public class TodoService {
         todo.setProcessInstanceId(processInstanceId);
         Task currentTask = workflowService.getCurrentTask(todo.getProcessInstanceId());
         if (currentTask == null) {
-            todo.setStatus("COMPLETED");// 流程結束
+            todo.setStatus("待辦結束");// 流程結束
         }else{
             todo.setStatus(currentTask.getName());
         }
@@ -44,10 +44,6 @@ public class TodoService {
     public String getTodoStatus(Long todoId) {
         Todo todo = todoRepository.findById(todoId)
                 .orElseThrow(() -> new RuntimeException("Todo not found"));
-//        Task currentTask = workflowService.getCurrentTask(todo.getProcessInstanceId());
-//        if (currentTask == null) {
-//            return todo.getStatus(); // 流程結束
-//        }
         return todo.getStatus();
     }
 
