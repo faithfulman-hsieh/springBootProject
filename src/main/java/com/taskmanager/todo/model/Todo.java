@@ -21,6 +21,7 @@ public class Todo {
     private String status;
 
     private String processInstanceId;
+    private String processDefinitionId; // 新增欄位：儲存流程定義 ID
     private String assignee;
 
     // 預設建構子

@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/todos")
@@ -19,21 +20,18 @@ public class TodoController {
         this.todoService = todoService;
     }
 
-    // 取得所有 Todo
     @GetMapping
     public ResponseEntity<List<Todo>> getAllTodos() {
         List<Todo> todos = todoService.getAllTodos();
         return ResponseEntity.ok(todos);
     }
 
-    // 建立 Todo
     @PostMapping("/addTodo")
     public ResponseEntity<Todo> createTodo(@RequestBody TodoRequest request) {
         Todo createdTodo = todoService.createTodo(request);
         return ResponseEntity.ok(createdTodo);
     }
 
-    // 取得 Todo 狀態
     @GetMapping("/{id}/status")
     public ResponseEntity<String> getTodoStatus(@PathVariable Long id, HttpServletRequest request) {
         String clientIp = request.getRemoteAddr();
@@ -42,7 +40,13 @@ public class TodoController {
         return ResponseEntity.ok(status);
     }
 
-    // 完成 Todo
+    // 新增：獲取流程圖和當前任務
+    @GetMapping("/{id}/diagram")
+    public ResponseEntity<Map<String, String>> getProcessDiagram(@PathVariable Long id) {
+        Map<String, String> diagramData = todoService.getProcessDiagram(id);
+        return ResponseEntity.ok(diagramData);
+    }
+
     @PostMapping("/{id}/complete")
     public ResponseEntity<Void> completeTodo(
             @PathVariable Long id,
