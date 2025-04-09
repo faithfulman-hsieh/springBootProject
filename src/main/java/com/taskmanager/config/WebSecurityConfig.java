@@ -61,6 +61,7 @@ public class WebSecurityConfig {
         configuration.setAllowCredentials(true);
         configuration.addAllowedOriginPattern("http://localhost:5173");
         configuration.addAllowedOriginPattern("https://vue3-project-faithfulman.vercel.app");
+        configuration.addAllowedOriginPattern("https://vue3-element-plus-faithfulman.vercel.app");
         configuration.addAllowedHeader("*");
         configuration.addAllowedMethod("*");
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
