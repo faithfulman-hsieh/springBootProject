@@ -46,7 +46,9 @@ public class WebSecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // 啟用 CORS
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/login").permitAll()
+                        // 允許 Swagger UI 和 API 文檔路徑
+                        .requestMatchers("/api/login", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // 其他路徑需要認證
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(new CorsFilter(corsConfigurationSource()), ChannelProcessingFilter.class) // 在其他過濾器之前添加 CORS 過濾器
