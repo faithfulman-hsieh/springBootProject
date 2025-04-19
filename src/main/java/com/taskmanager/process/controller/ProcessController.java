@@ -1,8 +1,8 @@
 package com.taskmanager.process.controller;
 
 import com.taskmanager.process.dto.ProcessRequest;
-import com.taskmanager.process.model.ProcessDefinition;
-import com.taskmanager.process.model.ProcessInstance;
+import com.taskmanager.process.model.ProcessDef;
+import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.service.ProcessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,10 +33,10 @@ public class ProcessController {
     @Operation(summary = "Get all process definitions", description = "Retrieves all process definitions")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Success",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessDefinition.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessDef.class))),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<List<ProcessDefinition>> getAllDefinitions() {
+    public ResponseEntity<List<ProcessDef>> getAllDefinitions() {
         return ResponseEntity.ok(processService.getAllDefinitions());
     }
 
@@ -44,11 +44,11 @@ public class ProcessController {
     @Operation(summary = "Deploy a process", description = "Deploys a new process with BPMN file")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Deployed successfully",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessDefinition.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessDef.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<ProcessDefinition> deployProcess(@ModelAttribute ProcessRequest request) {
+    public ResponseEntity<ProcessDef> deployProcess(@ModelAttribute ProcessRequest request) {
         return ResponseEntity.ok(processService.deployProcess(request.getName(), request.getFile()));
     }
 
@@ -56,11 +56,11 @@ public class ProcessController {
     @Operation(summary = "Toggle process status", description = "Enables or disables a process definition")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Status toggled",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessDefinition.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessDef.class))),
             @ApiResponse(responseCode = "404", description = "Process not found", content = @Content),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<ProcessDefinition> toggleProcessStatus(@PathVariable String id) {
+    public ResponseEntity<ProcessDef> toggleProcessStatus(@PathVariable String id) {
         return ResponseEntity.ok(processService.toggleProcessStatus(id));
     }
 
@@ -68,12 +68,12 @@ public class ProcessController {
     @Operation(summary = "Start a process", description = "Starts a process instance")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Started successfully",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessInstance.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessIns.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
             @ApiResponse(responseCode = "404", description = "Process not found", content = @Content),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<ProcessInstance> startProcess(@RequestBody ProcessRequest request) {
+    public ResponseEntity<ProcessIns> startProcess(@RequestBody ProcessRequest request) {
         return ResponseEntity.ok(processService.startProcess(request.getProcessDefinitionId(), request.getVariables()));
     }
 
@@ -81,10 +81,10 @@ public class ProcessController {
     @Operation(summary = "Get all instances", description = "Retrieves all running process instances")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Success",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessInstance.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessIns.class))),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<List<ProcessInstance>> getAllInstances() {
+    public ResponseEntity<List<ProcessIns>> getAllInstances() {
         return ResponseEntity.ok(processService.getAllInstances());
     }
 
@@ -100,18 +100,6 @@ public class ProcessController {
         return ResponseEntity.ok(processService.getProcessInstanceDiagram(id));
     }
 
-    @GetMapping("/definitions/{id}/diagram")
-    @Operation(summary = "Get process definition diagram", description = "Retrieves process definition diagram")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Success",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Map.class))),
-            @ApiResponse(responseCode = "404", description = "Definition not found", content = @Content),
-            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
-    })
-    public ResponseEntity<Map<String, Object>> getProcessDefinitionDiagram(@PathVariable String id) {
-        return ResponseEntity.ok(processService.getProcessDefinitionDiagram(id));
-    }
-
     @GetMapping("/definitions/{id}/form")
     @Operation(summary = "Get process form fields", description = "Retrieves form fields for a process definition")
     @ApiResponses(value = {
@@ -122,6 +110,77 @@ public class ProcessController {
     })
     public ResponseEntity<List<Map<String, Object>>> getProcessFormFields(@PathVariable String id) {
         return ResponseEntity.ok(processService.getProcessFormFields(id));
+    }
+
+    @GetMapping("/users")
+    @Operation(summary = "Get all users", description = "Retrieves all available users for task assignment")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = List.class))),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<List<Map<String, String>>> getUsers() {
+        return ResponseEntity.ok(processService.getUsers());
+    }
+
+    @GetMapping("/instances/{processInstanceId}/nodes")
+    @Operation(summary = "Get flow nodes", description = "Retrieves all flow nodes for a process instance")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = List.class))),
+            @ApiResponse(responseCode = "404", description = "Instance not found", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<List<Map<String, String>>> getFlowNodes(@PathVariable String processInstanceId) {
+        return ResponseEntity.ok(processService.getFlowNodes(processInstanceId));
+    }
+
+    @PostMapping("/instances/{processInstanceId}/reassign")
+    @Operation(summary = "Reassign task", description = "Reassigns the current task of a process instance to a new assignee")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Task reassigned successfully",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Instance or task not found", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<Void> reassignTask(@PathVariable String processInstanceId, @RequestBody Map<String, String> request) {
+        String newAssignee = request.get("newAssignee");
+        if (newAssignee == null || newAssignee.isEmpty()) {
+            throw new IllegalArgumentException("新執行者不能為空");
+        }
+        processService.reassignTask(processInstanceId, newAssignee);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/instances/{processInstanceId}/jump")
+    @Operation(summary = "Jump to node", description = "Jumps the process instance to a specified node")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Node jumped successfully",
+                    content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Instance or node not found", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<Void> jumpToNode(@PathVariable String processInstanceId, @RequestBody Map<String, String> request) {
+        String targetNode = request.get("targetNode");
+        if (targetNode == null || targetNode.isEmpty()) {
+            throw new IllegalArgumentException("目標節點不能為空");
+        }
+        processService.jumpToNode(processInstanceId, targetNode);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/definitions/{id}/diagram")
+    @Operation(summary = "Get process definition diagram", description = "Retrieves process definition diagram")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Map.class))),
+            @ApiResponse(responseCode = "404", description = "Definition not found", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<Map<String, Object>> getProcessDefinitionDiagram(@PathVariable String id) {
+        return ResponseEntity.ok(processService.getProcessDefinitionDiagram(id));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -1,9 +1,7 @@
-// src/main/java/com/taskmanager/task/controller/TaskController.java
 package com.taskmanager.task.controller;
 
 import com.taskmanager.task.dto.TaskFormRequest;
 import com.taskmanager.task.dto.TaskReassignRequest;
-import com.taskmanager.task.dto.TaskJumpRequest;
 import com.taskmanager.task.model.Task;
 import com.taskmanager.task.service.TaskManagerService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -75,19 +73,6 @@ public class TaskController {
     })
     public ResponseEntity<Void> reassignTask(@PathVariable String id, @RequestBody TaskReassignRequest request) {
         taskManagerService.reassignTask(id, request.getAssignee());
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/{instanceId}/jump")
-    @Operation(summary = "Jump to task", description = "Jumps the process to a specific task")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Jumped successfully", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Instance or task not found", content = @Content),
-            @ApiResponse(responseCode = "400", description = "Invalid target task", content = @Content),
-            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
-    })
-    public ResponseEntity<Void> jumpToTask(@PathVariable String instanceId, @RequestBody TaskJumpRequest request) {
-        taskManagerService.jumpToTask(instanceId, request.getTargetTaskId());
         return ResponseEntity.ok().build();
     }
 }

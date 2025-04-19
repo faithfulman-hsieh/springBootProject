@@ -1,15 +1,17 @@
 package com.taskmanager.process.service;
 
-import com.taskmanager.process.model.ProcessDefinition;
-import com.taskmanager.process.model.ProcessInstance;
-import com.taskmanager.process.repository.ProcessDefinitionRepository;
-import com.taskmanager.process.repository.ProcessInstanceRepository;
+import com.taskmanager.process.model.ProcessDef;
+import com.taskmanager.process.model.ProcessIns;
+import com.taskmanager.process.repository.ProcessDefRepository;
+import com.taskmanager.process.repository.ProcessInsRepository;
 import org.activiti.bpmn.model.*;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
 import org.activiti.engine.repository.Deployment;
-import org.activiti.engine.runtime.ProcessInstanceQuery;
+import org.activiti.engine.runtime.Execution;
+import org.activiti.engine.runtime.ProcessInstance;
+import org.activiti.engine.task.Task;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,18 +24,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 
 @Service
 public class ProcessService {
 
-    private final ProcessDefinitionRepository definitionRepository;
-    private final ProcessInstanceRepository instanceRepository;
+    private final ProcessDefRepository definitionRepository;
+    private final ProcessInsRepository instanceRepository;
     private final RepositoryService repositoryService;
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    public ProcessService(ProcessDefinitionRepository definitionRepository, ProcessInstanceRepository instanceRepository,
+    public ProcessService(ProcessDefRepository definitionRepository, ProcessInsRepository instanceRepository,
                           RepositoryService repositoryService, RuntimeService runtimeService, TaskService taskService) {
         this.definitionRepository = definitionRepository;
         this.instanceRepository = instanceRepository;
@@ -42,7 +45,11 @@ public class ProcessService {
         this.taskService = taskService;
     }
 
-    public List<ProcessDefinition> getAllDefinitions() {
+    // ... (其他方法保持不變：getAllDefinitions, deployProcess, toggleProcessStatus, startProcess, getAllInstances,
+    // getProcessInstanceDiagram, getProcessDefinitionDiagram, getProcessFormFields, getUsers, getFlowNodes,
+    // reassignTask, extractFormFields, mapFormPropertyType)
+
+    public List<ProcessDef> getAllDefinitions() {
         try {
             return definitionRepository.findAll();
         } catch (Exception e) {
@@ -50,7 +57,7 @@ public class ProcessService {
         }
     }
 
-    public ProcessDefinition deployProcess(String name, MultipartFile file) {
+    public ProcessDef deployProcess(String name, MultipartFile file) {
         try {
             if (file == null || file.isEmpty()) {
                 throw new IllegalArgumentException("BPMN 文件不能為空");
@@ -86,15 +93,15 @@ public class ProcessService {
                 throw new IllegalStateException("無法獲取流程定義，可能部署失敗");
             }
 
-            ProcessDefinition processDefinition = new ProcessDefinition();
-            processDefinition.setId(activitiDef.getId());
-            processDefinition.setName(name);
-            processDefinition.setVersion(activitiDef.getVersion() + ".0");
-            processDefinition.setStatus("active");
-            processDefinition.setDeploymentTime(LocalDateTime.now().format(FORMATTER));
-            processDefinition.setProcessDefinitionId(activitiDef.getId());
+            ProcessDef processDef = new ProcessDef();
+            processDef.setId(activitiDef.getId());
+            processDef.setName(name);
+            processDef.setVersion(activitiDef.getVersion() + ".0");
+            processDef.setStatus("active");
+            processDef.setDeploymentTime(LocalDateTime.now().format(FORMATTER));
+            processDef.setProcessDefinitionId(activitiDef.getId());
 
-            return definitionRepository.save(processDefinition);
+            return definitionRepository.save(processDef);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -102,19 +109,19 @@ public class ProcessService {
         }
     }
 
-    public ProcessDefinition toggleProcessStatus(String id) {
+    public ProcessDef toggleProcessStatus(String id) {
         try {
-            ProcessDefinition processDefinition = definitionRepository.findById(id)
+            ProcessDef processDef = definitionRepository.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException("流程不存在：" + id));
 
-            if ("active".equals(processDefinition.getStatus())) {
+            if ("active".equals(processDef.getStatus())) {
                 repositoryService.suspendProcessDefinitionById(id);
-                processDefinition.setStatus("suspended");
+                processDef.setStatus("suspended");
             } else {
                 repositoryService.activateProcessDefinitionById(id);
-                processDefinition.setStatus("active");
+                processDef.setStatus("active");
             }
-            return definitionRepository.save(processDefinition);
+            return definitionRepository.save(processDef);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -122,51 +129,51 @@ public class ProcessService {
         }
     }
 
-    public ProcessInstance startProcess(String processDefinitionId, Map<String, Object> variables) {
+    public ProcessIns startProcess(String processDefinitionId, Map<String, Object> variables) {
         try {
-            org.activiti.engine.runtime.ProcessInstance instance = runtimeService.startProcessInstanceById(processDefinitionId, variables);
-            org.activiti.engine.task.Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
+            ProcessInstance instance = runtimeService.startProcessInstanceById(processDefinitionId, variables);
+            Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
 
-            ProcessInstance processInstance = new ProcessInstance();
-            processInstance.setId(instance.getId());
-            processInstance.setName(instance.getProcessDefinitionName());
-            processInstance.setStatus("running");
-            processInstance.setProcessDefinitionId(processDefinitionId);
-            processInstance.setStartTime(LocalDateTime.now().format(FORMATTER));
-            processInstance.setCurrentTask(task != null ? task.getName() : null);
-            processInstance.setAssignee(task != null ? task.getAssignee() : null);
+            ProcessIns processIns = new ProcessIns();
+            processIns.setId(instance.getId());
+            processIns.setName(instance.getProcessDefinitionName());
+            processIns.setStatus("running");
+            processIns.setProcessDefinitionId(processDefinitionId);
+            processIns.setStartTime(LocalDateTime.now().format(FORMATTER));
+            processIns.setCurrentTask(task != null ? task.getName() : null);
+            processIns.setAssignee(task != null ? task.getAssignee() : null);
 
-            return instanceRepository.save(processInstance);
+            return instanceRepository.save(processIns);
         } catch (Exception e) {
             throw new IllegalStateException("流程啟動失敗：" + e.getMessage(), e);
         }
     }
 
-    public List<ProcessInstance> getAllInstances() {
+    public List<ProcessIns> getAllInstances() {
         try {
-            List<org.activiti.engine.runtime.ProcessInstance> instances = runtimeService.createProcessInstanceQuery().list();
-            List<ProcessInstance> processInstances = new ArrayList<>();
-            for (org.activiti.engine.runtime.ProcessInstance instance : instances) {
-                org.activiti.engine.task.Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
+            List<ProcessInstance> instances = runtimeService.createProcessInstanceQuery().list();
+            List<ProcessIns> processInsList = new ArrayList<>();
+            for (ProcessInstance instance : instances) {
+                Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
 
-                ProcessInstance processInstance = new ProcessInstance();
-                processInstance.setId(instance.getId());
-                processInstance.setName(instance.getProcessDefinitionName());
-                processInstance.setStatus("running");
-                processInstance.setProcessDefinitionId(instance.getProcessDefinitionId());
-                processInstance.setStartTime(LocalDateTime.ofInstant(instance.getStartTime().toInstant(),
+                ProcessIns processIns = new ProcessIns();
+                processIns.setId(instance.getId());
+                processIns.setName(instance.getProcessDefinitionName());
+                processIns.setStatus("running");
+                processIns.setProcessDefinitionId(instance.getProcessDefinitionId());
+                processIns.setStartTime(LocalDateTime.ofInstant(instance.getStartTime().toInstant(),
                         java.time.ZoneId.systemDefault()).format(FORMATTER));
-                processInstance.setCurrentTask(task != null ? task.getName() : "Completed");
-                processInstance.setAssignee(task != null ? task.getAssignee() : null);
+                processIns.setCurrentTask(task != null ? task.getName() : "Completed");
+                processIns.setAssignee(task != null ? task.getAssignee() : null);
 
-                processInstances.add(processInstance);
-                instanceRepository.save(processInstance);
+                processInsList.add(processIns);
+                instanceRepository.save(processIns);
             }
 
-            if (processInstances.isEmpty()) {
+            if (processInsList.isEmpty()) {
                 throw new IllegalArgumentException("無運行中的流程實例");
             }
-            return processInstances;
+            return processInsList;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -176,14 +183,14 @@ public class ProcessService {
 
     public Map<String, Object> getProcessInstanceDiagram(String instanceId) {
         try {
-            org.activiti.engine.runtime.ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+            ProcessInstance instance = runtimeService.createProcessInstanceQuery()
                     .processInstanceId(instanceId)
                     .singleResult();
             if (instance == null) {
                 throw new IllegalArgumentException("流程實例不存在：" + instanceId);
             }
 
-            org.activiti.engine.task.Task task = taskService.createTaskQuery().processInstanceId(instanceId).singleResult();
+            Task task = taskService.createTaskQuery().processInstanceId(instanceId).singleResult();
             String bpmnXml;
             try (InputStream inputStream = repositoryService.getProcessModel(instance.getProcessDefinitionId());
                  Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8.name())) {
@@ -235,7 +242,7 @@ public class ProcessService {
             }
 
             BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
-            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0); // 假設只有一個流程
+            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
 
             StartEvent startEvent = process.getFlowElements().stream()
                     .filter(element -> element instanceof StartEvent)
@@ -248,6 +255,145 @@ public class ProcessService {
             throw e;
         } catch (Exception e) {
             throw new IllegalStateException("獲取表單字段失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public List<Map<String, String>> getUsers() {
+        try {
+            // 這裡簡化為硬編碼，實際應從用戶管理系統獲取
+            List<Map<String, String>> users = new ArrayList<>();
+            Map<String, String> user1 = new HashMap<>();
+            user1.put("label", "張三");
+            user1.put("value", "zhangsan");
+            Map<String, String> user2 = new HashMap<>();
+            user2.put("label", "李四");
+            user2.put("value", "lisi");
+            users.add(user1);
+            users.add(user2);
+            return users;
+        } catch (Exception e) {
+            throw new IllegalStateException("獲取用戶列表失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public List<Map<String, String>> getFlowNodes(String processInstanceId) {
+        try {
+            ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (instance == null) {
+                throw new IllegalArgumentException("流程實例不存在：" + processInstanceId);
+            }
+
+            BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
+            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
+
+            List<Map<String, String>> nodes = process.getFlowElements().stream()
+                    .filter(element -> element instanceof UserTask || element instanceof ServiceTask)
+                    .map(element -> {
+                        Map<String, String> node = new HashMap<>();
+                        node.put("id", element.getId());
+                        node.put("name", element.getName() != null ? element.getName() : element.getId());
+                        return node;
+                    })
+                    .collect(Collectors.toList());
+
+            if (nodes.isEmpty()) {
+                throw new IllegalArgumentException("流程中無可用節點：" + processInstanceId);
+            }
+            return nodes;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("獲取流程節點失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public void reassignTask(String processInstanceId, String newAssignee) {
+        try {
+            Task task = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (task == null) {
+                throw new IllegalArgumentException("當前流程實例無活動任務：" + processInstanceId);
+            }
+
+            taskService.setAssignee(task.getId(), newAssignee);
+
+            ProcessIns processIns = instanceRepository.findById(processInstanceId)
+                    .orElseThrow(() -> new IllegalArgumentException("流程實例不存在：" + processInstanceId));
+            processIns.setAssignee(newAssignee);
+            instanceRepository.save(processIns);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("任務重新分配失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public void jumpToNode(String processInstanceId, String targetNode) {
+        try {
+            ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (instance == null) {
+                throw new IllegalArgumentException("流程實例不存在：" + processInstanceId);
+            }
+
+            Task currentTask = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (currentTask == null) {
+                throw new IllegalArgumentException("當前流程實例無活動任務：" + processInstanceId);
+            }
+
+            BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
+            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
+            FlowElement targetElement = process.getFlowElements().stream()
+                    .filter(element -> element.getId().equals(targetNode))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("目標節點不存在：" + targetNode));
+
+            // 根據目標節點設置必要的變量以滿足閘道條件
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("targetActivityId", targetNode);
+
+            // 動態設置 action 和 priority 變量以引導流程
+            switch (targetNode) {
+                case "ProcessTask":
+                    variables.put("action", "reassign");
+                    break;
+                case "ConfirmTask":
+                    variables.put("action", "complete");
+                    break;
+                case "ReviewTask":
+                    variables.put("action", "confirm");
+                    variables.put("priority", "high");
+                    break;
+                case "AutoAssignTask":
+                    // AutoAssignTask 是服務任務，可能需要特殊處理
+                    variables.put("action", "reassign"); // 假設回退到初始分配
+                    break;
+                default:
+                    throw new IllegalArgumentException("不支援跳轉到節點：" + targetNode);
+            }
+
+            // 完成當前任務
+            taskService.complete(currentTask.getId(), variables);
+
+            // 更新流程實例狀態
+            Task newTask = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            ProcessIns processIns = instanceRepository.findById(processInstanceId)
+                    .orElseThrow(() -> new IllegalArgumentException("流程實例不存在：" + processInstanceId));
+            processIns.setCurrentTask(newTask != null ? newTask.getName() : "Completed");
+            processIns.setAssignee(newTask != null ? newTask.getAssignee() : null);
+            instanceRepository.save(processIns);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("節點跳轉失敗：" + e.getMessage(), e);
         }
     }
 

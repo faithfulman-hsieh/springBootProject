@@ -4,7 +4,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
 @Entity
-public class ProcessDefinition {
+public class ProcessDef {
     @Id
     private String id;
     private String name;
@@ -13,10 +13,10 @@ public class ProcessDefinition {
     private String deploymentTime;
     private String processDefinitionId;
 
-    public ProcessDefinition() {
+    public ProcessDef() {
     }
 
-    public ProcessDefinition(String id, String name, String version, String status, String deploymentTime, String processDefinitionId) {
+    public ProcessDef(String id, String name, String version, String status, String deploymentTime, String processDefinitionId) {
         this.id = id;
         this.name = name;
         this.version = version;
