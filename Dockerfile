@@ -1,33 +1,42 @@
-# 使用官方的 OpenJDK 作为基础镜像
-FROM openjdk:17-jdk-slim AS build
+# ------------
+# 階段 1: 建置 (Build Stage)
+# ------------
+# 舊的寫法 (已失效): FROM openjdk:17-jdk-slim AS build
+# 新的寫法 (推薦):
+FROM eclipse-temurin:17-jdk-jammy AS build
 
-# 设置工作目录
 WORKDIR /app
 
-# 复制 pom.xml 文件
+# 複製 Maven wrapper 和 pom.xml (利用 Docker cache 機制加速)
+COPY mvnw .
+COPY .mvn .mvn
 COPY pom.xml .
 
-# 复制 src 目录
-COPY src ./src
+# 給予 mvnw 執行權限 (避免 Permission denied)
+RUN chmod +x ./mvnw
 
-# 使用 Maven 构建项目
-RUN apt-get update && apt-get install -y maven
-RUN mvn clean package -DskipTests
+# 下載依賴 (這步會比較久，但之後改 code 不改 pom 就會很快)
+RUN ./mvnw dependency:go-offline -B
 
-# 创建运行镜像
-FROM openjdk:17-jdk-slim
+# 複製原始碼並打包
+COPY src src
+RUN ./mvnw package -DskipTests
 
-# 设置工作目录
+# ------------
+# 階段 2: 執行 (Runtime Stage)
+# ------------
+# 舊的寫法 (已失效): FROM openjdk:17-jdk-slim
+# 新的寫法 (推薦):
+FROM eclipse-temurin:17-jre-jammy
+
 WORKDIR /app
 
-# 复制生成的 JAR 文件
-COPY --from=build /app/target/demo-0.0.1-SNAPSHOT.jar /app/demo.jar
+# 從第一階段複製打包好的 jar 檔
+# 注意：這裡假設你的 jar 檔名是 app.jar 或者你需要確認 target 下的檔名
+# 如果你的 pom.xml 沒有設定 finalName，通常是 artifactId-version.jar
+# 這裡使用通用配對符號，或是請確認你原本的 COPY 指令
+COPY --from=build /app/target/*.jar app.jar
 
-# 设置 PORT 环境变量，Render 平台要求
-ENV PORT 8080
-
-# 开放应用程序运行的端口
 EXPOSE 8080
 
-# 执行应用程序
-ENTRYPOINT ["java", "-jar", "/app/demo.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
