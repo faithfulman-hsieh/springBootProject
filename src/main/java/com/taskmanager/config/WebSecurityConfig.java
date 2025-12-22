@@ -47,7 +47,8 @@ public class WebSecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         // 允許 Swagger UI 和 API 文檔路徑
-                        .requestMatchers("/api/login", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // 允許 /keep-alive 不需要登入即可存取
+                        .requestMatchers("/keep-alive", "/api/login", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // 其他路徑需要認證
                         .anyRequest().authenticated()
                 )
