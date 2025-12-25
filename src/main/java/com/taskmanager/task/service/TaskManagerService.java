@@ -2,17 +2,15 @@ package com.taskmanager.task.service;
 
 import com.taskmanager.task.model.Task;
 import com.taskmanager.task.repository.TaskRepository;
-import org.activiti.bpmn.model.BpmnModel;
-import org.activiti.bpmn.model.ExtensionElement;
-import org.activiti.bpmn.model.FlowElement;
-import org.activiti.bpmn.model.UserTask;
+import org.activiti.bpmn.model.*; // 這裡包含了 FormProperty 和 FormValue
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,7 +25,10 @@ public class TaskManagerService {
     private final RuntimeService runtimeService;
     private final RepositoryService repositoryService;
 
-    public TaskManagerService(TaskRepository repository, TaskService taskService, RuntimeService runtimeService, RepositoryService repositoryService) {
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    public TaskManagerService(TaskRepository repository, TaskService taskService,
+                              RuntimeService runtimeService, RepositoryService repositoryService) {
         this.repository = repository;
         this.taskService = taskService;
         this.runtimeService = runtimeService;
@@ -35,23 +36,42 @@ public class TaskManagerService {
     }
 
     public List<Task> getMyTasks() {
-        String assignee = SecurityContextHolder.getContext().getAuthentication().getName();
-        List<org.activiti.engine.task.Task> activitiTasks = taskService.createTaskQuery().taskAssignee(assignee).list();
+        String assignee = "user";
+
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
+                assignee = auth.getName();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        List<org.activiti.engine.task.Task> activitiTasks = taskService.createTaskQuery()
+                .taskAssignee(assignee)
+                .orderByTaskCreateTime().desc()
+                .list();
+
         List<Task> tasks = new ArrayList<>();
         for (org.activiti.engine.task.Task t : activitiTasks) {
-            String processName = repositoryService.createProcessDefinitionQuery()
-                    .processDefinitionId(t.getProcessDefinitionId())
-                    .singleResult()
-                    .getName();
+            String processName = "Unknown Process";
+            try {
+                processName = repositoryService.createProcessDefinitionQuery()
+                        .processDefinitionId(t.getProcessDefinitionId())
+                        .singleResult()
+                        .getName();
+            } catch (Exception e) {
+                // ignore
+            }
+
             Task task = new Task(
                     t.getId(),
                     t.getName(),
                     processName,
                     t.getAssignee(),
-                    t.getCreateTime().toInstant().atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                    t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER)
             );
             tasks.add(task);
-            repository.save(task);
         }
         return tasks;
     }
@@ -64,53 +84,40 @@ public class TaskManagerService {
 
         BpmnModel bpmnModel = repositoryService.getBpmnModel(task.getProcessDefinitionId());
         FlowElement flowElement = bpmnModel.getMainProcess().getFlowElement(task.getTaskDefinitionKey());
+
         if (!(flowElement instanceof UserTask)) {
-            throw new IllegalStateException("任務非用戶任務：" + taskId);
+            return new ArrayList<>();
         }
 
         UserTask userTask = (UserTask) flowElement;
         List<Map<String, Object>> formFields = new ArrayList<>();
-        Map<String, List<ExtensionElement>> extensionElements = userTask.getExtensionElements();
-        List<ExtensionElement> formProperties = extensionElements.getOrDefault("formProperty", new ArrayList<>());
-        for (ExtensionElement formProperty : formProperties) {
+
+        // 這裡直接使用 FormProperty，因為上方 import org.activiti.bpmn.model.* 已經包含了它
+        for (FormProperty prop : userTask.getFormProperties()) {
             Map<String, Object> field = new HashMap<>();
-            field.put("key", formProperty.getAttributeValue(null, "id"));
-            field.put("label", formProperty.getAttributeValue(null, "name"));
-            String type = formProperty.getAttributeValue(null, "type");
-            field.put("type", mapFormPropertyType(type != null ? type : "string"));
+            field.put("key", prop.getId());
+            field.put("label", prop.getName() != null ? prop.getName() : prop.getId());
+
+            String type = prop.getType() != null ? prop.getType() : "string";
+            field.put("type", mapFormPropertyType(type));
+            field.put("required", prop.isRequired());
+            field.put("disabled", !prop.isWriteable());
 
             if ("enum".equals(type)) {
                 List<Map<String, String>> options = new ArrayList<>();
-                List<ExtensionElement> values = formProperty.getChildElements().getOrDefault("value", new ArrayList<>());
-                for (ExtensionElement value : values) {
+                for (FormValue val : prop.getFormValues()) {
                     Map<String, String> option = new HashMap<>();
-                    option.put("label", value.getAttributeValue(null, "name"));
-                    option.put("value", value.getAttributeValue(null, "id"));
+                    option.put("label", val.getName());
+                    option.put("value", val.getId());
                     options.add(option);
                 }
                 field.put("options", options);
+
+                if ("action".equalsIgnoreCase(prop.getId())) {
+                    field.put("uiComponent", "buttons");
+                }
             }
-
             formFields.add(field);
-        }
-
-        // 根據任務類型添加特定字段
-        if (task.getTaskDefinitionKey().equals("ProcessTask")) {
-            formFields.add(createActionField(List.of(
-                    Map.of("label", "重新分配", "value", "reassign"),
-                    Map.of("label", "完成", "value", "complete")
-            )));
-        } else if (task.getTaskDefinitionKey().equals("ConfirmTask")) {
-            formFields.add(createActionField(List.of(
-                    Map.of("label", "拒絕", "value", "reject"),
-                    Map.of("label", "確認", "value", "confirm")
-            )));
-            formFields.add(createPriorityField());
-        } else if (task.getTaskDefinitionKey().equals("ReviewTask")) {
-            formFields.add(createActionField(List.of(
-                    Map.of("label", "拒絕", "value", "reject"),
-                    Map.of("label", "通過", "value", "approve")
-            )));
         }
 
         return formFields;
@@ -123,8 +130,8 @@ public class TaskManagerService {
         }
 
         taskService.complete(taskId, formData);
+
         repository.findById(taskId).ifPresent(taskEntity -> {
-            taskEntity.setCreateTime(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
             repository.save(taskEntity);
         });
     }
@@ -136,41 +143,21 @@ public class TaskManagerService {
         }
 
         taskService.setAssignee(taskId, assignee);
+
         repository.findById(taskId).ifPresent(taskEntity -> {
             taskEntity.setAssignee(assignee);
             repository.save(taskEntity);
         });
     }
 
-    private Map<String, Object> createActionField(List<Map<String, String>> options) {
-        Map<String, Object> field = new HashMap<>();
-        field.put("key", "action");
-        field.put("label", "操作");
-        field.put("type", "select");
-        field.put("options", options);
-        return field;
-    }
-
-    private Map<String, Object> createPriorityField() {
-        Map<String, Object> field = new HashMap<>();
-        field.put("key", "priority");
-        field.put("label", "優先級");
-        field.put("type", "select");
-        field.put("options", List.of(
-                Map.of("label", "高", "value", "high"),
-                Map.of("label", "一般", "value", "normal")
-        ));
-        return field;
-    }
-
     private String mapFormPropertyType(String activitiType) {
         switch (activitiType) {
-            case "string":
-                return "text";
-            case "enum":
-                return "select";
-            default:
-                return "text";
+            case "string": return "text";
+            case "long": return "number";
+            case "date": return "date";
+            case "enum": return "select";
+            case "boolean": return "switch";
+            default: return "text";
         }
     }
 }

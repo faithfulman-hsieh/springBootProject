@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:activiti="http://activiti.org/bpmn" xmlns:flowable="http://flowable.org/bpmn" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_LeaveProcess_V2" targetNamespace="http://bpmn.io/schema/bpmn" exporter="BPMN Modeler" exporterVersion="5.0.0">
+  <bpmn:process id="leaveProcess" name="請假申請流程" isExecutable="true">
+
+    <bpmn:startEvent id="StartEvent_1" name="填寫請假單">
+      <bpmn:extensionElements>
+        <activiti:formProperty id="leaveType" name="假別" type="enum" required="true">
+          <activiti:value id="annual" name="特休"/>
+          <activiti:value id="personal" name="事假"/>
+        </activiti:formProperty>
+        <activiti:formProperty id="days" name="請假天數" type="long" required="true"/>
+        <activiti:formProperty id="reason" name="請假事由" type="string" required="true"/>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_StartToSupervisor</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:userTask id="SupervisorTask" name="直屬主管簽核" activiti:assignee="admin">
+      <bpmn:extensionElements>
+        <activiti:formProperty id="action" name="簽核動作" type="enum" required="true">
+          <activiti:value id="approve" name="核准"/>
+          <activiti:value id="reject" name="駁回"/>
+        </activiti:formProperty>
+        <activiti:formProperty id="comment" name="簽核意見" type="string"/>
+        <activiti:formProperty id="nextAssignee" name="下一關處理人" type="string" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_StartToSupervisor</bpmn:incoming>
+      <bpmn:outgoing>Flow_SupervisorDecision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_StartToSupervisor" sourceRef="StartEvent_1" targetRef="SupervisorTask"/>
+
+    <bpmn:exclusiveGateway id="Gateway_Supervisor">
+      <bpmn:incoming>Flow_SupervisorDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_SupervisorReject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToManagerCheck</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_SupervisorDecision" sourceRef="SupervisorTask" targetRef="Gateway_Supervisor"/>
+
+    <bpmn:sequenceFlow id="Flow_SupervisorReject" name="駁回" sourceRef="Gateway_Supervisor" targetRef="EndEvent_Reject">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reject'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:exclusiveGateway id="Gateway_ManagerCheck" name="需經理簽核?">
+      <bpmn:incoming>Flow_ToManagerCheck</bpmn:incoming>
+      <bpmn:outgoing>Flow_SkipManager</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToManager</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ToManagerCheck" name="核准" sourceRef="Gateway_Supervisor" targetRef="Gateway_ManagerCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_ToManager" name="天數&gt;3或事假" sourceRef="Gateway_ManagerCheck" targetRef="ManagerTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${days &gt; 3 || leaveType == 'personal'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_SkipManager" name="一般案件" sourceRef="Gateway_ManagerCheck" targetRef="EndEvent_Approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${days &lt;= 3 &amp;&amp; leaveType != 'personal'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:userTask id="ManagerTask" name="經理簽核" activiti:assignee="${nextAssignee}">
+      <bpmn:extensionElements>
+        <activiti:formProperty id="action" name="簽核動作" type="enum" required="true">
+          <activiti:value id="approve" name="核准"/>
+          <activiti:value id="reject" name="駁回"/>
+        </activiti:formProperty>
+        <activiti:formProperty id="nextAssignee" name="下一關處理人" type="string" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToManager</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManagerDecision</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_ManagerDecision">
+      <bpmn:incoming>Flow_ManagerDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_ManagerReject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToDirectorCheck</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ManagerDecision" sourceRef="ManagerTask" targetRef="Gateway_ManagerDecision"/>
+    <bpmn:sequenceFlow id="Flow_ManagerReject" name="駁回" sourceRef="Gateway_ManagerDecision" targetRef="EndEvent_Reject">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reject'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:exclusiveGateway id="Gateway_DirectorCheck" name="需協理簽核?">
+      <bpmn:incoming>Flow_ToDirectorCheck</bpmn:incoming>
+      <bpmn:outgoing>Flow_SkipDirector</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToDirector</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ToDirectorCheck" name="核准" sourceRef="Gateway_ManagerDecision" targetRef="Gateway_DirectorCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_ToDirector" name="天數&gt;7" sourceRef="Gateway_DirectorCheck" targetRef="DirectorTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${days &gt; 7}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_SkipDirector" sourceRef="Gateway_DirectorCheck" targetRef="EndEvent_Approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${days &lt;= 7}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:userTask id="DirectorTask" name="協理簽核" activiti:assignee="${nextAssignee}">
+      <bpmn:extensionElements>
+        <activiti:formProperty id="action" name="簽核動作" type="enum" required="true">
+          <activiti:value id="approve" name="核准"/>
+          <activiti:value id="reject" name="駁回"/>
+        </activiti:formProperty>
+        <activiti:formProperty id="nextAssignee" name="下一關處理人" type="string" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToDirector</bpmn:incoming>
+      <bpmn:outgoing>Flow_DirectorDecision</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_DirectorDecision">
+      <bpmn:incoming>Flow_DirectorDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_DirectorReject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToGMCheck</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_DirectorDecision" sourceRef="DirectorTask" targetRef="Gateway_DirectorDecision"/>
+    <bpmn:sequenceFlow id="Flow_DirectorReject" name="駁回" sourceRef="Gateway_DirectorDecision" targetRef="EndEvent_Reject">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reject'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:exclusiveGateway id="Gateway_GMCheck" name="需總經理簽核?">
+      <bpmn:incoming>Flow_ToGMCheck</bpmn:incoming>
+      <bpmn:outgoing>Flow_SkipGM</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToGM</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_ToGMCheck" name="核准" sourceRef="Gateway_DirectorDecision" targetRef="Gateway_GMCheck">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_ToGM" name="天數&gt;14" sourceRef="Gateway_GMCheck" targetRef="GMTask">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${days &gt; 14}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_SkipGM" sourceRef="Gateway_GMCheck" targetRef="EndEvent_Approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${days &lt;= 14}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:userTask id="GMTask" name="總經理簽核" activiti:assignee="${nextAssignee}">
+      <bpmn:extensionElements>
+        <activiti:formProperty id="action" name="簽核動作" type="enum" required="true">
+          <activiti:value id="approve" name="核准"/>
+          <activiti:value id="reject" name="駁回"/>
+        </activiti:formProperty>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToGM</bpmn:incoming>
+      <bpmn:outgoing>Flow_GMDecision</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gateway_GMDecision">
+      <bpmn:incoming>Flow_GMDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_GMReject</bpmn:outgoing>
+      <bpmn:outgoing>Flow_GMApprove</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_GMDecision" sourceRef="GMTask" targetRef="Gateway_GMDecision"/>
+    <bpmn:sequenceFlow id="Flow_GMReject" name="駁回" sourceRef="Gateway_GMDecision" targetRef="EndEvent_Reject">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'reject'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_GMApprove" name="核准" sourceRef="Gateway_GMDecision" targetRef="EndEvent_Approve">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:endEvent id="EndEvent_Approve" name="請假核准"/>
+    <bpmn:endEvent id="EndEvent_Reject" name="請假駁回"/>
+
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Leave">
+    <bpmndi:BPMNPlane id="BPMNPlane_Leave" bpmnElement="leaveProcess">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1"><dc:Bounds x="150" y="232" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SupervisorTask_di" bpmnElement="SupervisorTask"><dc:Bounds x="240" y="210" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_StartToSupervisor_di" bpmnElement="Flow_StartToSupervisor"><di:waypoint x="186" y="250"/><di:waypoint x="240" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_Supervisor_di" bpmnElement="Gateway_Supervisor" isMarkerVisible="true"><dc:Bounds x="380" y="225" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_SupervisorDecision_di" bpmnElement="Flow_SupervisorDecision"><di:waypoint x="340" y="250"/><di:waypoint x="380" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_ManagerCheck_di" bpmnElement="Gateway_ManagerCheck" isMarkerVisible="true"><dc:Bounds x="480" y="225" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="475" y="280" width="60" height="20"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToManagerCheck_di" bpmnElement="Flow_ToManagerCheck"><di:waypoint x="430" y="250"/><di:waypoint x="480" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="ManagerTask_di" bpmnElement="ManagerTask"><dc:Bounds x="580" y="210" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToManager_di" bpmnElement="Flow_ToManager"><di:waypoint x="530" y="250"/><di:waypoint x="580" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SkipManager_di" bpmnElement="Flow_SkipManager"><di:waypoint x="505" y="225"/><di:waypoint x="505" y="100"/><di:waypoint x="1568" y="100"/><di:waypoint x="1568" y="232"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_ManagerDecision_di" bpmnElement="Gateway_ManagerDecision" isMarkerVisible="true"><dc:Bounds x="720" y="225" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ManagerDecision_di" bpmnElement="Flow_ManagerDecision"><di:waypoint x="680" y="250"/><di:waypoint x="720" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_DirectorCheck_di" bpmnElement="Gateway_DirectorCheck" isMarkerVisible="true"><dc:Bounds x="820" y="225" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToDirectorCheck_di" bpmnElement="Flow_ToDirectorCheck"><di:waypoint x="770" y="250"/><di:waypoint x="820" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="DirectorTask_di" bpmnElement="DirectorTask"><dc:Bounds x="920" y="210" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToDirector_di" bpmnElement="Flow_ToDirector"><di:waypoint x="870" y="250"/><di:waypoint x="920" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SkipDirector_di" bpmnElement="Flow_SkipDirector"><di:waypoint x="845" y="225"/><di:waypoint x="845" y="100"/><di:waypoint x="1568" y="100"/><di:waypoint x="1568" y="232"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_DirectorDecision_di" bpmnElement="Gateway_DirectorDecision" isMarkerVisible="true"><dc:Bounds x="1060" y="225" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_DirectorDecision_di" bpmnElement="Flow_DirectorDecision"><di:waypoint x="1020" y="250"/><di:waypoint x="1060" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_GMCheck_di" bpmnElement="Gateway_GMCheck" isMarkerVisible="true"><dc:Bounds x="1150" y="225" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToGMCheck_di" bpmnElement="Flow_ToGMCheck"><di:waypoint x="1110" y="250"/><di:waypoint x="1150" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="GMTask_di" bpmnElement="GMTask"><dc:Bounds x="1250" y="210" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToGM_di" bpmnElement="Flow_ToGM"><di:waypoint x="1200" y="250"/><di:waypoint x="1250" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SkipGM_di" bpmnElement="Flow_SkipGM"><di:waypoint x="1175" y="225"/><di:waypoint x="1175" y="100"/><di:waypoint x="1568" y="100"/><di:waypoint x="1568" y="232"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_GMDecision_di" bpmnElement="Gateway_GMDecision" isMarkerVisible="true"><dc:Bounds x="1400" y="225" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_GMDecision_di" bpmnElement="Flow_GMDecision"><di:waypoint x="1350" y="250"/><di:waypoint x="1400" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EndEvent_Approve_di" bpmnElement="EndEvent_Approve"><dc:Bounds x="1550" y="232" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_GMApprove_di" bpmnElement="Flow_GMApprove"><di:waypoint x="1450" y="250"/><di:waypoint x="1550" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EndEvent_Reject_di" bpmnElement="EndEvent_Reject"><dc:Bounds x="1550" y="432" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_SupervisorReject_di" bpmnElement="Flow_SupervisorReject"><di:waypoint x="405" y="275"/><di:waypoint x="405" y="450"/><di:waypoint x="1550" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ManagerReject_di" bpmnElement="Flow_ManagerReject"><di:waypoint x="745" y="275"/><di:waypoint x="745" y="450"/><di:waypoint x="1550" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DirectorReject_di" bpmnElement="Flow_DirectorReject"><di:waypoint x="1085" y="275"/><di:waypoint x="1085" y="450"/><di:waypoint x="1550" y="450"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_GMReject_di" bpmnElement="Flow_GMReject"><di:waypoint x="1425" y="275"/><di:waypoint x="1425" y="450"/><di:waypoint x="1550" y="450"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

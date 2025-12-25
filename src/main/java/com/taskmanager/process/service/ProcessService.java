@@ -9,7 +9,6 @@ import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
 import org.activiti.engine.repository.Deployment;
-import org.activiti.engine.runtime.Execution;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.stereotype.Service;
@@ -44,10 +43,6 @@ public class ProcessService {
         this.runtimeService = runtimeService;
         this.taskService = taskService;
     }
-
-    // ... (其他方法保持不變：getAllDefinitions, deployProcess, toggleProcessStatus, startProcess, getAllInstances,
-    // getProcessInstanceDiagram, getProcessDefinitionDiagram, getProcessFormFields, getUsers, getFlowNodes,
-    // reassignTask, extractFormFields, mapFormPropertyType)
 
     public List<ProcessDef> getAllDefinitions() {
         try {
@@ -131,9 +126,34 @@ public class ProcessService {
 
     public ProcessIns startProcess(String processDefinitionId, Map<String, Object> variables) {
         try {
+            // 1. 取得當前使用者 ID (為了開發方便，如果沒登入就預設 "user")
+            String currentUserId = "user";
+            try {
+                org.springframework.security.core.Authentication auth =
+                        org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+                if (auth != null && !"anonymousUser".equals(auth.getName())) {
+                    currentUserId = auth.getName();
+                }
+            } catch (Exception e) {
+                // 忽略 Context 錯誤，使用預設值
+            }
+
+            // 2. 啟動流程實例 (並將發起人 ID 存入變數，方便後續使用)
+            // variables.put("initiator", currentUserId); // 選用：這在 BPMN 常見
             ProcessInstance instance = runtimeService.startProcessInstanceById(processDefinitionId, variables);
+
+            // 3. 抓取當前產生的第一個任務
             Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
 
+            // ★★★ 新增：自動指派邏輯 ★★★
+            // 如果任務存在且尚未指派給任何人，就強制指派給當前操作者
+            if (task != null && task.getAssignee() == null) {
+                taskService.setAssignee(task.getId(), currentUserId);
+                // 重新查詢以確保資料最新
+                task = taskService.createTaskQuery().taskId(task.getId()).singleResult();
+            }
+
+            // 4. 回傳流程實例資訊
             ProcessIns processIns = new ProcessIns();
             processIns.setId(instance.getId());
             processIns.setName(instance.getProcessDefinitionName());
@@ -171,7 +191,9 @@ public class ProcessService {
             }
 
             if (processInsList.isEmpty()) {
-                throw new IllegalArgumentException("無運行中的流程實例");
+                // 註解掉此行以免前端在無實例時報錯，或者可以根據需求保留
+                // throw new IllegalArgumentException("無運行中的流程實例");
+                return new ArrayList<>();
             }
             return processInsList;
         } catch (IllegalArgumentException e) {
@@ -250,7 +272,8 @@ public class ProcessService {
                     .findFirst()
                     .orElseThrow(() -> new IllegalStateException("流程中未找到開始事件"));
 
-            return extractFormFields(startEvent.getExtensionElements());
+            // ★★★ 修正點：使用 getFormProperties() 而非 getExtensionElements() ★★★
+            return convertFormProperties(startEvent.getFormProperties());
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -349,7 +372,7 @@ public class ProcessService {
 
             BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
             org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
-            FlowElement targetElement = process.getFlowElements().stream()
+            process.getFlowElements().stream()
                     .filter(element -> element.getId().equals(targetNode))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("目標節點不存在：" + targetNode));
@@ -371,11 +394,11 @@ public class ProcessService {
                     variables.put("priority", "high");
                     break;
                 case "AutoAssignTask":
-                    // AutoAssignTask 是服務任務，可能需要特殊處理
-                    variables.put("action", "reassign"); // 假設回退到初始分配
+                    variables.put("action", "reassign");
                     break;
                 default:
-                    throw new IllegalArgumentException("不支援跳轉到節點：" + targetNode);
+                    // 不拋出異常，允許跳轉到其他節點，只是不預設變數
+                    break;
             }
 
             // 完成當前任務
@@ -397,43 +420,46 @@ public class ProcessService {
         }
     }
 
-    private List<Map<String, Object>> extractFormFields(Map<String, List<ExtensionElement>> extensionElements) {
+    // ★★★ 新增：將 Activiti FormProperty 轉換為前端需要的 JSON 格式 ★★★
+    private List<Map<String, Object>> convertFormProperties(List<FormProperty> formProperties) {
         List<Map<String, Object>> formFields = new ArrayList<>();
 
-        List<ExtensionElement> formProperties = extensionElements.getOrDefault("formProperty", new ArrayList<>());
-        for (ExtensionElement formProperty : formProperties) {
+        for (FormProperty prop : formProperties) {
             Map<String, Object> field = new HashMap<>();
-            field.put("key", formProperty.getAttributeValue(null, "id"));
-            field.put("label", formProperty.getAttributeValue(null, "name"));
-            String type = formProperty.getAttributeValue(null, "type");
-            field.put("type", mapFormPropertyType(type != null ? type : "string"));
+            field.put("key", prop.getId());
+            field.put("label", prop.getName() != null ? prop.getName() : prop.getId());
 
+            // 類型轉換
+            String type = prop.getType() != null ? prop.getType() : "string";
+            field.put("type", mapFormPropertyType(type));
+
+            field.put("required", prop.isRequired());
+            field.put("disabled", !prop.isWriteable()); // 如果不可寫，前端禁用
+
+            // 處理下拉選單 (Enum)
             if ("enum".equals(type)) {
                 List<Map<String, String>> options = new ArrayList<>();
-                List<ExtensionElement> values = formProperty.getChildElements().getOrDefault("value", new ArrayList<>());
-                for (ExtensionElement value : values) {
+                for (FormValue val : prop.getFormValues()) {
                     Map<String, String> option = new HashMap<>();
-                    option.put("label", value.getAttributeValue(null, "name"));
-                    option.put("value", value.getAttributeValue(null, "id"));
+                    option.put("label", val.getName());
+                    option.put("value", val.getId());
                     options.add(option);
                 }
                 field.put("options", options);
             }
-
             formFields.add(field);
         }
-
         return formFields;
     }
 
     private String mapFormPropertyType(String activitiType) {
         switch (activitiType) {
-            case "string":
-                return "text";
-            case "enum":
-                return "select";
-            default:
-                return "text";
+            case "string": return "text";
+            case "long": return "number";
+            case "date": return "date"; // 支援日期選擇器
+            case "enum": return "select";
+            case "boolean": return "switch";
+            default: return "text";
         }
     }
 }
