@@ -10,10 +10,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.core.io.Resource; // ★★★ 新增 Import
+import org.springframework.http.HttpHeaders; // ★★★ 新增 Import
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType; // ★★★ 新增 Import
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder; // ★★★ 新增 Import
+import java.nio.charset.StandardCharsets; // ★★★ 新增 Import
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -181,6 +186,27 @@ public class ProcessController {
     })
     public ResponseEntity<Map<String, Object>> getProcessDefinitionDiagram(@PathVariable String id) {
         return ResponseEntity.ok(processService.getProcessDefinitionDiagram(id));
+    }
+
+    // ★★★ 新增：下載流程範本 API ★★★
+    @GetMapping("/template/{filename}")
+    @Operation(summary = "Download process template", description = "Downloads a BPMN process template file")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/octet-stream")),
+            @ApiResponse(responseCode = "404", description = "Template not found", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<Resource> downloadTemplate(@PathVariable String filename) {
+        Resource resource = processService.getProcessTemplate(filename);
+
+        // 設定檔名編碼
+        String encodedFilename = URLEncoder.encode(resource.getFilename(), StandardCharsets.UTF_8);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + encodedFilename + "\"")
+                .body(resource);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

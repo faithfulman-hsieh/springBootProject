@@ -9,14 +9,17 @@ import org.activiti.engine.HistoryService;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
-import org.activiti.engine.history.HistoricActivityInstance; // ★★★ 記得引入這個
+import org.activiti.engine.history.HistoricActivityInstance;
 import org.activiti.engine.history.HistoricProcessInstance;
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
+import org.springframework.core.io.ClassPathResource; // ★★★ 新增 Import
+import org.springframework.core.io.Resource;      // ★★★ 新增 Import
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.FileNotFoundException; // ★★★ 新增 Import
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -50,6 +53,8 @@ public class ProcessService {
         this.taskService = taskService;
         this.historyService = historyService;
     }
+
+    // ... (其他原有方法 getAllDefinitions, deployProcess 等保持不變) ...
 
     public List<ProcessDef> getAllDefinitions() {
         try {
@@ -200,13 +205,11 @@ public class ProcessService {
         }
     }
 
-    // ★★★ 修正方法：支援查詢已結束的流程圖，並停在結束節點 ★★★
     public Map<String, Object> getProcessInstanceDiagram(String instanceId) {
         try {
             String processDefinitionId;
             String currentTaskKey = null;
 
-            // 1. 先嘗試從 RuntimeService 查詢 (正在運行中)
             ProcessInstance instance = runtimeService.createProcessInstanceQuery()
                     .processInstanceId(instanceId)
                     .singleResult();
@@ -216,7 +219,6 @@ public class ProcessService {
                 Task task = taskService.createTaskQuery().processInstanceId(instanceId).singleResult();
                 currentTaskKey = (task != null) ? task.getTaskDefinitionKey() : null;
             } else {
-                // 2. Runtime 查不到，嘗試從 HistoryService 查詢 (已結束)
                 HistoricProcessInstance historicInstance = historyService.createHistoricProcessInstanceQuery()
                         .processInstanceId(instanceId)
                         .singleResult();
@@ -226,21 +228,18 @@ public class ProcessService {
                 }
                 processDefinitionId = historicInstance.getProcessDefinitionId();
 
-                // ★★★ 關鍵：找出這個流程最後走到的「結束節點 (End Event)」 ★★★
                 List<HistoricActivityInstance> endActivities = historyService.createHistoricActivityInstanceQuery()
                         .processInstanceId(instanceId)
-                        .activityType("endEvent") // 只抓取結束節點
+                        .activityType("endEvent")
                         .finished()
                         .orderByHistoricActivityInstanceEndTime().desc()
                         .list();
 
                 if (!endActivities.isEmpty()) {
-                    // 取最後一個觸發的結束節點 (處理流程中可能有多個結束點的情況)
                     currentTaskKey = endActivities.get(0).getActivityId();
                 }
             }
 
-            // 3. 讀取 BPMN XML
             String bpmnXml;
             try (InputStream inputStream = repositoryService.getProcessModel(processDefinitionId);
                  Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8.name())) {
@@ -438,6 +437,20 @@ public class ProcessService {
             throw e;
         } catch (Exception e) {
             throw new IllegalStateException("節點跳轉失敗：" + e.getMessage(), e);
+        }
+    }
+
+    // ★★★ 新增：讀取流程範本檔案 ★★★
+    public Resource getProcessTemplate(String filename) {
+        try {
+            // 讀取 resources/processes/ 目錄下的檔案
+            Resource resource = new ClassPathResource("processes/" + filename);
+            if (!resource.exists()) {
+                throw new FileNotFoundException("範本檔案不存在：" + filename);
+            }
+            return resource;
+        } catch (Exception e) {
+            throw new IllegalStateException("讀取範本失敗：" + e.getMessage(), e);
         }
     }
 
