@@ -17,10 +17,20 @@ public class AutoAssignTask implements JavaDelegate {
     @Override
     public void execute(DelegateExecution execution) {
         try {
-            String assignee = determineAssignee(execution);
-            execution.setVariable("assignee", assignee);
-            logger.info("✅ 任務自動分派完成 - 分派給: {}, 流程實例ID: {},execution.getId(): {},execution.getProcessDefinitionId(): {}",
-                    assignee, execution.getProcessInstanceId(),execution.getId(),execution.getProcessDefinitionId());
+            // ★★★ 修正點：先檢查變數中是否已經有 assignee ★★★
+            String existingAssignee = (String) execution.getVariable("assignee");
+            String assignee;
+
+            if (existingAssignee != null && !existingAssignee.isEmpty()) {
+                assignee = existingAssignee;
+                logger.info("ℹ️ 使用已存在的 Assignee: {}", assignee);
+            } else {
+                assignee = determineAssignee(execution);
+                execution.setVariable("assignee", assignee);
+                logger.info("✅ 任務自動分派完成 - 分派給: {}, 流程實例ID: {}",
+                        assignee, execution.getProcessInstanceId());
+            }
+
         } catch (Exception e) {
             logger.error("❌ 自動分派任務失敗 - 流程實例ID: {}",
                     execution.getProcessInstanceId(), e);
@@ -29,10 +39,7 @@ public class AutoAssignTask implements JavaDelegate {
     }
 
     private String determineAssignee(DelegateExecution execution) {
-        // 這裡可以實作更複雜的分派邏輯，例如:
-        // 1. 從流程變數獲取候選人
-        // 2. 查詢資料庫獲取合適人選
-        // 3. 調用外部API獲得分派資訊
+        // 這裡可以實作更複雜的分派邏輯
         return defaultAssignee;
     }
 }
