@@ -107,7 +107,7 @@
             <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
         </bpmn:sequenceFlow>
 
-        <bpmn:userTask id="ReviewTask" name="審閱待辦">
+        <bpmn:userTask id="ReviewTask" name="審閱待辦" activiti:assignee="${assignee}">
             <bpmn:extensionElements>
                 <activiti:formProperty id="todoTitle" name="待辦標題" type="string" writable="false"/>
                 <activiti:formProperty id="priority" name="優先級" type="enum" writable="false">

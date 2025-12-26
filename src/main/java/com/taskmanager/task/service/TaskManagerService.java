@@ -41,7 +41,6 @@ public class TaskManagerService {
         this.historyService = historyService;
     }
 
-    // ... (getMyTasks 和 getHistoryTasks 保持不變) ...
     public List<TaskDto> getMyTasks() {
         String assignee = "user";
         try {
@@ -53,6 +52,7 @@ public class TaskManagerService {
             // ignore
         }
 
+        // 回歸單純的 Task 查詢，不撈變數
         List<Task> activitiTasks = taskService.createTaskQuery()
                 .taskAssignee(assignee)
                 .orderByTaskCreateTime().desc()
@@ -95,6 +95,7 @@ public class TaskManagerService {
             // ignore
         }
 
+        // 回歸單純的歷史查詢
         List<HistoricTaskInstance> historicTasks = historyService.createHistoricTaskInstanceQuery()
                 .taskAssignee(assignee)
                 .finished()
@@ -158,7 +159,7 @@ public class TaskManagerService {
             return new ArrayList<>();
         }
 
-        // ★★★ 關鍵修正：取得此任務相關的所有變數值 ★★★
+        // ★★★ 關鍵：取得變數，這是對話框能顯示資料的來源 ★★★
         Map<String, Object> variables = taskService.getVariables(taskId);
 
         UserTask userTask = (UserTask) flowElement;
@@ -172,9 +173,11 @@ public class TaskManagerService {
             String type = prop.getType() != null ? prop.getType() : "string";
             field.put("type", mapFormPropertyType(type));
             field.put("required", prop.isRequired());
+
+            // 是否唯讀
             field.put("disabled", !prop.isWriteable());
 
-            // ★★★ 關鍵修正：將變數值填入 value 欄位，前端才能顯示 ★★★
+            // ★★★ 關鍵：如果有對應的變數值，填入 value 屬性 ★★★
             if (variables.containsKey(prop.getId())) {
                 field.put("value", variables.get(prop.getId()));
             }
@@ -198,7 +201,6 @@ public class TaskManagerService {
         return formFields;
     }
 
-    // ... (後面的 submitTaskForm, reassignTask, mapFormPropertyType 保持不變) ...
     public void submitTaskForm(String taskId, Map<String, Object> formData) {
         Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
         if (task == null) {

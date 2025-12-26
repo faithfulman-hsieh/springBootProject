@@ -20,17 +20,16 @@ public class WorkflowService {
     }
 
     /**
-     * 啟動 todoProcess 流程，並傳入相關變數
-     * ★★★ 修改：接收 title, description, priority ★★★
+     * ★★★ 修正：增加參數 title, description, priority ★★★
      */
     public String startProcess(String assignee, String title, String description, String priority) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("assignee", assignee);
 
-        // ★★★ 關鍵：將資料存入流程變數，讓 UserTask 表單可以讀取 ★★★
-        variables.put("todoTitle", title);       // 對應 BPMN id="todoTitle"
-        variables.put("description", description); // 對應 BPMN id="description"
-        variables.put("priority", priority != null ? priority : "medium"); // 對應 BPMN id="priority"
+        // ★★★ 關鍵：必須把這些資料存入流程變數，getTaskForm 才能讀取到並回傳給前端 ★★★
+        variables.put("todoTitle", title);
+        variables.put("description", description);
+        variables.put("priority", priority != null ? priority : "medium");
 
         return runtimeService.startProcessInstanceByKey("todoProcess", variables).getProcessInstanceId();
     }
@@ -49,7 +48,6 @@ public class WorkflowService {
     public void completeTask(String taskId, String action, String priority) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("action", action);
-        // 如果確認階段有修改優先級，也更新回去
         if (priority != null) {
             variables.put("priority", priority);
         }

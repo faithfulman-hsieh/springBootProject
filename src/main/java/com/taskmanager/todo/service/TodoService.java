@@ -36,13 +36,14 @@ public class TodoService {
     public Todo createTodo(TodoRequest request) {
         Todo todo = new Todo(request.getTitle(), request.getDescription(), request.getAssignee());
 
-        // ★★★ 修改：傳入標題、描述與優先級給流程引擎 ★★★
+        // ★★★ 修正：呼叫 startProcess 時，傳入完整的資料 ★★★
         String processInstanceId = workflowService.startProcess(
                 request.getAssignee(),
-                request.getTitle(),
-                request.getDescription(),
-                request.getPriority()
+                request.getTitle(),       // 傳入標題
+                request.getDescription(), // 傳入描述
+                request.getPriority()     // 傳入優先級
         );
+
         todo.setProcessInstanceId(processInstanceId);
 
         Task currentTask = workflowService.getCurrentTask(processInstanceId);
@@ -56,6 +57,8 @@ public class TodoService {
 
         return todoRepository.save(todo);
     }
+
+    // ... 其他方法保持不變 ...
 
     public String getTodoStatus(Long todoId) {
         Todo todo = todoRepository.findById(todoId)

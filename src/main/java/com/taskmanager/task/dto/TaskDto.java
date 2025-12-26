@@ -14,7 +14,7 @@ public class TaskDto {
     // 用於前端查看流程圖
     private String processInstanceId;
 
-    // ★★★ 新增：當前處理人員 (用於經手任務) ★★★
+    // 用於經手任務：顯示當前處理人員
     private String currentAssignee;
 
     public TaskDto() {
