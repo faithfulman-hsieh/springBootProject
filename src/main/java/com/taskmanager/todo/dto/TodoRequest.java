@@ -14,6 +14,10 @@ public class TodoRequest {
     @Schema(description = "Username of the assignee", example = "john_doe", required = false)
     private String assignee;
 
+    // ★★★ 新增：優先級 (配合 BPMN 流程定義) ★★★
+    @Schema(description = "Priority of the task (low, medium, high)", example = "medium")
+    private String priority;
+
     // getters and setters
     public String getTitle() {
         return title;
@@ -37,5 +41,13 @@ public class TodoRequest {
 
     public void setAssignee(String assignee) {
         this.assignee = assignee;
+    }
+
+    public String getPriority() {
+        return priority;
+    }
+
+    public void setPriority(String priority) {
+        this.priority = priority;
     }
 }

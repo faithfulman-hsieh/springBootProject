@@ -13,7 +13,7 @@ public class ActivitiConfig {
     @Bean
     public Deployment deployProcess(RepositoryService repositoryService) {
          return repositoryService.createDeployment()
-                .addClasspathResource("processes/taskProcess.bpmn20.xml")
+                .addClasspathResource("processes/todoProcess.bpmn20.xml")
                 .deploy();
     }
 

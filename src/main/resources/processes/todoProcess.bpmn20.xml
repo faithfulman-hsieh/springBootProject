@@ -26,6 +26,14 @@
 
         <bpmn:userTask id="ProcessTask" name="處理待辦" activiti:assignee="${assignee}">
             <bpmn:extensionElements>
+                <activiti:formProperty id="todoTitle" name="待辦標題" type="string" writable="false"/>
+                <activiti:formProperty id="priority" name="優先級" type="enum" writable="false">
+                    <activiti:value id="low" name="低"/>
+                    <activiti:value id="medium" name="中"/>
+                    <activiti:value id="high" name="高"/>
+                </activiti:formProperty>
+                <activiti:formProperty id="description" name="待辦描述" type="string" writable="false"/>
+
                 <activiti:formProperty id="action" name="處理動作" type="enum" required="true">
                     <activiti:value id="reassign" name="重新指派"/>
                     <activiti:value id="complete" name="完成"/>
@@ -38,6 +46,7 @@
         </bpmn:userTask>
 
         <bpmn:sequenceFlow id="Flow_AutoAssignToProcessTask" sourceRef="AutoAssignTask" targetRef="ProcessTask"/>
+
         <bpmn:exclusiveGateway id="DecisionGateway">
             <bpmn:incoming>Flow_ProcessTaskToDecisionGateway</bpmn:incoming>
             <bpmn:outgoing>Flow_BackToProcessTask</bpmn:outgoing>
@@ -50,6 +59,7 @@
         <bpmn:sequenceFlow id="Flow_DecisionToConfirmTask" sourceRef="DecisionGateway" targetRef="ConfirmTask">
             <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'complete'}</bpmn:conditionExpression>
         </bpmn:sequenceFlow>
+
         <bpmn:exclusiveGateway id="ConfirmDecisionGateway">
             <bpmn:incoming>Flow_ConfirmTaskToDecision</bpmn:incoming>
             <bpmn:outgoing>Flow_FromConfirmTask</bpmn:outgoing>
@@ -65,6 +75,16 @@
 
         <bpmn:userTask id="ConfirmTask" name="確認待辦" activiti:assignee="${assignee}">
             <bpmn:extensionElements>
+                <activiti:formProperty id="todoTitle" name="待辦標題" type="string" writable="false"/>
+
+                <activiti:formProperty id="priority" name="優先級" type="enum" required="true">
+                    <activiti:value id="low" name="低"/>
+                    <activiti:value id="medium" name="中"/>
+                    <activiti:value id="high" name="高"/>
+                </activiti:formProperty>
+
+                <activiti:formProperty id="description" name="待辦描述" type="string" writable="false"/>
+
                 <activiti:formProperty id="action" name="確認動作" type="enum" required="true">
                     <activiti:value id="reject" name="駁回"/>
                     <activiti:value id="confirm" name="確認"/>
@@ -86,8 +106,17 @@
         <bpmn:sequenceFlow id="Flow_ToEndEvent" sourceRef="ReviewDecisionGateway" targetRef="EndEvent">
             <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${action == 'approve'}</bpmn:conditionExpression>
         </bpmn:sequenceFlow>
+
         <bpmn:userTask id="ReviewTask" name="審閱待辦">
             <bpmn:extensionElements>
+                <activiti:formProperty id="todoTitle" name="待辦標題" type="string" writable="false"/>
+                <activiti:formProperty id="priority" name="優先級" type="enum" writable="false">
+                    <activiti:value id="low" name="低"/>
+                    <activiti:value id="medium" name="中"/>
+                    <activiti:value id="high" name="高"/>
+                </activiti:formProperty>
+                <activiti:formProperty id="description" name="待辦描述" type="string" writable="false"/>
+
                 <activiti:formProperty id="action" name="審閱動作" type="enum" required="true">
                     <activiti:value id="reject" name="駁回"/>
                     <activiti:value id="approve" name="通過"/>
@@ -96,6 +125,7 @@
             <bpmn:incoming>Flow_ToReviewTask</bpmn:incoming>
             <bpmn:outgoing>Flow_ReviewTaskToDecision</bpmn:outgoing>
         </bpmn:userTask>
+
         <bpmn:exclusiveGateway id="ReviewDecisionGateway">
             <bpmn:incoming>Flow_ReviewTaskToDecision</bpmn:incoming>
             <bpmn:outgoing>Flow_FromReviewTask</bpmn:outgoing>
@@ -113,6 +143,7 @@
             <bpmn:incoming>Flow_ToEndEventFromReview</bpmn:incoming>
         </bpmn:endEvent>
     </bpmn:process>
+
     <bpmndi:BPMNDiagram id="BPMNDiagram_1">
         <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="todoProcess">
             <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1"><dc:Bounds x="182" y="162" width="36" height="36"/></bpmndi:BPMNShape>

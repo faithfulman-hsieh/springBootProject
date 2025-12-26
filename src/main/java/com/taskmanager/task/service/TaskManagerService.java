@@ -41,6 +41,7 @@ public class TaskManagerService {
         this.historyService = historyService;
     }
 
+    // ... (getMyTasks 和 getHistoryTasks 保持不變) ...
     public List<TaskDto> getMyTasks() {
         String assignee = "user";
         try {
@@ -76,7 +77,7 @@ public class TaskManagerService {
                     t.getAssignee(),
                     t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
                     t.getProcessInstanceId(),
-                    null // 待辦任務不需要 currentAssignee，因為就是在自己身上
+                    null
             );
             tasks.add(taskDto);
         }
@@ -112,20 +113,17 @@ public class TaskManagerService {
                 // ignore
             }
 
-            // ★★★ 查詢流程目前狀態與當前處理人 ★★★
             String currentAssignee = "流程已結束";
             ProcessInstance pi = runtimeService.createProcessInstanceQuery()
                     .processInstanceId(ht.getProcessInstanceId())
                     .singleResult();
 
             if (pi != null) {
-                // 如果流程實例還在 (Running)，查出目前停在哪個任務
                 List<Task> activeTasks = taskService.createTaskQuery()
                         .processInstanceId(ht.getProcessInstanceId())
                         .list();
 
                 if (!activeTasks.isEmpty()) {
-                    // 可能有多個並行任務，用逗號串接
                     currentAssignee = activeTasks.stream()
                             .map(t -> t.getAssignee() == null ? "待認領" : t.getAssignee())
                             .distinct()
@@ -140,7 +138,7 @@ public class TaskManagerService {
                     ht.getAssignee(),
                     ht.getEndTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
                     ht.getProcessInstanceId(),
-                    currentAssignee // ★★★ 填入當前處理人 ★★★
+                    currentAssignee
             );
             tasks.add(taskDto);
         }
@@ -160,6 +158,9 @@ public class TaskManagerService {
             return new ArrayList<>();
         }
 
+        // ★★★ 關鍵修正：取得此任務相關的所有變數值 ★★★
+        Map<String, Object> variables = taskService.getVariables(taskId);
+
         UserTask userTask = (UserTask) flowElement;
         List<Map<String, Object>> formFields = new ArrayList<>();
 
@@ -172,6 +173,11 @@ public class TaskManagerService {
             field.put("type", mapFormPropertyType(type));
             field.put("required", prop.isRequired());
             field.put("disabled", !prop.isWriteable());
+
+            // ★★★ 關鍵修正：將變數值填入 value 欄位，前端才能顯示 ★★★
+            if (variables.containsKey(prop.getId())) {
+                field.put("value", variables.get(prop.getId()));
+            }
 
             if ("enum".equals(type)) {
                 List<Map<String, String>> options = new ArrayList<>();
@@ -192,6 +198,7 @@ public class TaskManagerService {
         return formFields;
     }
 
+    // ... (後面的 submitTaskForm, reassignTask, mapFormPropertyType 保持不變) ...
     public void submitTaskForm(String taskId, Map<String, Object> formData) {
         Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
         if (task == null) {

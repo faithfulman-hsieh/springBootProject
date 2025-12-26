@@ -35,21 +35,22 @@ public class TodoService {
 
     public Todo createTodo(TodoRequest request) {
         Todo todo = new Todo(request.getTitle(), request.getDescription(), request.getAssignee());
-        String processInstanceId = workflowService.startProcess(request.getAssignee());
+
+        // ★★★ 修改：傳入標題、描述與優先級給流程引擎 ★★★
+        String processInstanceId = workflowService.startProcess(
+                request.getAssignee(),
+                request.getTitle(),
+                request.getDescription(),
+                request.getPriority()
+        );
         todo.setProcessInstanceId(processInstanceId);
 
-        // 獲取當前任務並儲存 processDefinitionId
         Task currentTask = workflowService.getCurrentTask(processInstanceId);
         if (currentTask != null) {
             todo.setProcessDefinitionId(currentTask.getProcessDefinitionId());
             todo.setStatus(currentTask.getName());
         } else {
-            // 如果沒有當前任務（流程可能立即結束），需要從流程實例中獲取 processDefinitionId
-            // 假設 WorkflowService 提供一個方法來獲取 processDefinitionId
-            // BUG String processDefinitionId = workflowService.getProcessDefinitionId(processInstanceId);
-            // if (processDefinitionId != null) {
-                todo.setProcessDefinitionId(null);
-            // }
+            todo.setProcessDefinitionId(null);
             todo.setStatus("待辦結束");
         }
 
@@ -70,10 +71,8 @@ public class TodoService {
             throw new RuntimeException("該 Todo 沒有對應的流程");
         }
 
-        // 獲取當前任務（可能為 null）
         Task currentTask = workflowService.getCurrentTask(processInstanceId);
 
-        // 使用儲存的 processDefinitionId 查詢流程定義
         String processDefinitionId = todo.getProcessDefinitionId();
         if (processDefinitionId == null) {
             throw new RuntimeException("該 Todo 沒有對應的流程定義 ID");
@@ -86,7 +85,6 @@ public class TodoService {
             throw new RuntimeException("找不到對應的流程定義");
         }
 
-        // 從 InputStream 讀取 BPMN XML 內容
         String bpmnXml;
         try (InputStream inputStream = repositoryService.getProcessModel(processDefinition.getId());
              Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8.name())) {

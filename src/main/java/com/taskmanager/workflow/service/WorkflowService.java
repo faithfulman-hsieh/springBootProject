@@ -20,38 +20,39 @@ public class WorkflowService {
     }
 
     /**
-     * 啟動 todoProcess 流程
+     * 啟動 todoProcess 流程，並傳入相關變數
+     * ★★★ 修改：接收 title, description, priority ★★★
      */
-    public String startProcess(String assignee) {
+    public String startProcess(String assignee, String title, String description, String priority) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("assignee", assignee);
+
+        // ★★★ 關鍵：將資料存入流程變數，讓 UserTask 表單可以讀取 ★★★
+        variables.put("todoTitle", title);       // 對應 BPMN id="todoTitle"
+        variables.put("description", description); // 對應 BPMN id="description"
+        variables.put("priority", priority != null ? priority : "medium"); // 對應 BPMN id="priority"
+
         return runtimeService.startProcessInstanceByKey("todoProcess", variables).getProcessInstanceId();
     }
 
-    /**
-     * 取得某使用者的待處理任務
-     */
     public List<String> getUserTasks(String assignee) {
         List<Task> tasks = taskService.createTaskQuery().taskAssignee(assignee).list();
         return tasks.stream().map(Task::getName).collect(Collectors.toList());
     }
 
-    /**
-     * 查詢目前 ProcessInstance 的 Task
-     */
     public Task getCurrentTask(String processInstanceId) {
         return taskService.createTaskQuery()
                 .processInstanceId(processInstanceId)
                 .singleResult();
     }
 
-    /**
-     * 完成任務
-     */
     public void completeTask(String taskId, String action, String priority) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("action", action);
-        variables.put("priority", priority);
+        // 如果確認階段有修改優先級，也更新回去
+        if (priority != null) {
+            variables.put("priority", priority);
+        }
         taskService.complete(taskId, variables);
     }
 }
