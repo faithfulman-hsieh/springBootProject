@@ -1,8 +1,8 @@
 package com.taskmanager.task.controller;
 
+import com.taskmanager.task.dto.TaskDto;
 import com.taskmanager.task.dto.TaskFormRequest;
 import com.taskmanager.task.dto.TaskReassignRequest;
-import com.taskmanager.task.model.Task;
 import com.taskmanager.task.service.TaskManagerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -31,11 +31,22 @@ public class TaskController {
     @Operation(summary = "Get user's tasks", description = "Retrieves tasks assigned to the current user")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Success",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = Task.class))),
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = TaskDto.class))),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<List<Task>> getMyTasks() {
+    public ResponseEntity<List<TaskDto>> getMyTasks() {
         return ResponseEntity.ok(taskManagerService.getMyTasks());
+    }
+
+    @GetMapping("/history-tasks")
+    @Operation(summary = "Get user's history tasks", description = "Retrieves completed tasks assigned to the current user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = TaskDto.class))),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<List<TaskDto>> getHistoryTasks() {
+        return ResponseEntity.ok(taskManagerService.getHistoryTasks());
     }
 
     @GetMapping("/{id}/form")

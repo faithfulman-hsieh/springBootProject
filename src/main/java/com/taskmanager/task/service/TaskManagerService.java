@@ -1,11 +1,13 @@
 package com.taskmanager.task.service;
 
-import com.taskmanager.task.model.Task;
-import com.taskmanager.task.repository.TaskRepository;
-import org.activiti.bpmn.model.*; // 這裡包含了 FormProperty 和 FormValue
+import com.taskmanager.task.dto.TaskDto;
+import org.activiti.bpmn.model.*;
+import org.activiti.engine.HistoryService;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
+import org.activiti.engine.history.HistoricTaskInstance;
+import org.activiti.engine.task.Task;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -20,24 +22,25 @@ import java.util.Map;
 @Service
 public class TaskManagerService {
 
-    private final TaskRepository repository;
     private final TaskService taskService;
     private final RuntimeService runtimeService;
     private final RepositoryService repositoryService;
+    private final HistoryService historyService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    public TaskManagerService(TaskRepository repository, TaskService taskService,
-                              RuntimeService runtimeService, RepositoryService repositoryService) {
-        this.repository = repository;
+    public TaskManagerService(TaskService taskService,
+                              RuntimeService runtimeService,
+                              RepositoryService repositoryService,
+                              HistoryService historyService) {
         this.taskService = taskService;
         this.runtimeService = runtimeService;
         this.repositoryService = repositoryService;
+        this.historyService = historyService;
     }
 
-    public List<Task> getMyTasks() {
+    public List<TaskDto> getMyTasks() {
         String assignee = "user";
-
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
@@ -47,13 +50,13 @@ public class TaskManagerService {
             // ignore
         }
 
-        List<org.activiti.engine.task.Task> activitiTasks = taskService.createTaskQuery()
+        List<Task> activitiTasks = taskService.createTaskQuery()
                 .taskAssignee(assignee)
                 .orderByTaskCreateTime().desc()
                 .list();
 
-        List<Task> tasks = new ArrayList<>();
-        for (org.activiti.engine.task.Task t : activitiTasks) {
+        List<TaskDto> tasks = new ArrayList<>();
+        for (Task t : activitiTasks) {
             String processName = "Unknown Process";
             try {
                 processName = repositoryService.createProcessDefinitionQuery()
@@ -64,20 +67,64 @@ public class TaskManagerService {
                 // ignore
             }
 
-            Task task = new Task(
+            TaskDto taskDto = new TaskDto(
                     t.getId(),
                     t.getName(),
                     processName,
                     t.getAssignee(),
-                    t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER)
+                    t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
+                    t.getProcessInstanceId()
             );
-            tasks.add(task);
+            tasks.add(taskDto);
+        }
+        return tasks;
+    }
+
+    public List<TaskDto> getHistoryTasks() {
+        String assignee = "user";
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
+                assignee = auth.getName();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+
+        List<HistoricTaskInstance> historicTasks = historyService.createHistoricTaskInstanceQuery()
+                .taskAssignee(assignee)
+                .finished()
+                // ★★★ 修正點：使用正確的方法名稱 orderByHistoricTaskInstanceEndTime ★★★
+                .orderByHistoricTaskInstanceEndTime().desc()
+                .list();
+
+        List<TaskDto> tasks = new ArrayList<>();
+        for (HistoricTaskInstance ht : historicTasks) {
+            String processName = "Unknown Process";
+            try {
+                processName = repositoryService.createProcessDefinitionQuery()
+                        .processDefinitionId(ht.getProcessDefinitionId())
+                        .singleResult()
+                        .getName();
+            } catch (Exception e) {
+                // ignore
+            }
+
+            TaskDto taskDto = new TaskDto(
+                    ht.getId(),
+                    ht.getName(),
+                    processName,
+                    ht.getAssignee(),
+                    ht.getEndTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
+                    ht.getProcessInstanceId()
+            );
+            tasks.add(taskDto);
         }
         return tasks;
     }
 
     public List<Map<String, Object>> getTaskForm(String taskId) {
-        org.activiti.engine.task.Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
         if (task == null) {
             throw new IllegalArgumentException("任務不存在：" + taskId);
         }
@@ -92,7 +139,6 @@ public class TaskManagerService {
         UserTask userTask = (UserTask) flowElement;
         List<Map<String, Object>> formFields = new ArrayList<>();
 
-        // 這裡直接使用 FormProperty，因為上方 import org.activiti.bpmn.model.* 已經包含了它
         for (FormProperty prop : userTask.getFormProperties()) {
             Map<String, Object> field = new HashMap<>();
             field.put("key", prop.getId());
@@ -119,35 +165,23 @@ public class TaskManagerService {
             }
             formFields.add(field);
         }
-
         return formFields;
     }
 
     public void submitTaskForm(String taskId, Map<String, Object> formData) {
-        org.activiti.engine.task.Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
         if (task == null) {
             throw new IllegalArgumentException("任務不存在：" + taskId);
         }
-
         taskService.complete(taskId, formData);
-
-        repository.findById(taskId).ifPresent(taskEntity -> {
-            repository.save(taskEntity);
-        });
     }
 
     public void reassignTask(String taskId, String assignee) {
-        org.activiti.engine.task.Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
         if (task == null) {
             throw new IllegalArgumentException("任務不存在：" + taskId);
         }
-
         taskService.setAssignee(taskId, assignee);
-
-        repository.findById(taskId).ifPresent(taskEntity -> {
-            taskEntity.setAssignee(assignee);
-            repository.save(taskEntity);
-        });
     }
 
     private String mapFormPropertyType(String activitiType) {

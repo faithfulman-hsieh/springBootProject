@@ -1,34 +1,31 @@
-package com.taskmanager.task.model;
+package com.taskmanager.task.dto;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import io.swagger.v3.oas.annotations.media.Schema;
 
-@Entity
-@Table(name = "tasks")
-public class Task {
+@Schema(description = "任務列表顯示用的資料傳輸物件")
+public class TaskDto {
 
-    @Id
     private String id;
     private String name;
     private String processName;
     private String assignee;
     private String createTime;
 
-    // 1. 無參數建構子 (JPA 需要)
-    public Task() {
+    // 用於前端查看流程圖
+    private String processInstanceId;
+
+    public TaskDto() {
     }
 
-    // 2. 全參數建構子 (Service 需要)
-    public Task(String id, String name, String processName, String assignee, String createTime) {
+    public TaskDto(String id, String name, String processName, String assignee, String createTime, String processInstanceId) {
         this.id = id;
         this.name = name;
         this.processName = processName;
         this.assignee = assignee;
         this.createTime = createTime;
+        this.processInstanceId = processInstanceId;
     }
 
-    // 3. 標準 Getter/Setter (確保 JSON 序列化一定成功)
     public String getId() {
         return id;
     }
@@ -67,5 +64,13 @@ public class Task {
 
     public void setCreateTime(String createTime) {
         this.createTime = createTime;
+    }
+
+    public String getProcessInstanceId() {
+        return processInstanceId;
+    }
+
+    public void setProcessInstanceId(String processInstanceId) {
+        this.processInstanceId = processInstanceId;
     }
 }

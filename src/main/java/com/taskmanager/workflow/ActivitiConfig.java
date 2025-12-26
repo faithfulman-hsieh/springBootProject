@@ -12,7 +12,7 @@ public class ActivitiConfig {
 
     @Bean
     public Deployment deployProcess(RepositoryService repositoryService) {
-        return repositoryService.createDeployment()
+         return repositoryService.createDeployment()
                 .addClasspathResource("processes/taskProcess.bpmn20.xml")
                 .deploy();
     }
@@ -20,11 +20,16 @@ public class ActivitiConfig {
     @Bean
     public ProcessEngineConfigurationImpl processEngineConfiguration() {
         StandaloneProcessEngineConfiguration config = new StandaloneProcessEngineConfiguration();
+        // 請注意：這裡使用 H2 記憶體資料庫，每次重啟資料都會消失
         config.setJdbcUrl("jdbc:h2:mem:activiti-db;DB_CLOSE_DELAY=-1");
         config.setJdbcDriver("org.h2.Driver");
         config.setJdbcUsername("sa");
         config.setJdbcPassword("");
         config.setDatabaseSchemaUpdate("true"); // 自動更新 DB Schema
+
+        // ★★★ 關鍵：確保歷史層級被設定 (雖然 application.properties 有設，但手動 config 可能會覆蓋) ★★★
+        config.setHistory("full");
+
         return config;
     }
 
@@ -46,5 +51,11 @@ public class ActivitiConfig {
     @Bean
     public RepositoryService repositoryService(ProcessEngine processEngine) {
         return processEngine.getRepositoryService();
+    }
+
+    // ★★★ 新增：註冊 HistoryService Bean ★★★
+    @Bean
+    public HistoryService historyService(ProcessEngine processEngine) {
+        return processEngine.getHistoryService();
     }
 }
