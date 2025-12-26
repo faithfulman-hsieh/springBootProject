@@ -7,6 +7,7 @@ import org.activiti.engine.RepositoryService;
 import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
 import org.activiti.engine.history.HistoricTaskInstance;
+import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class TaskManagerService {
@@ -73,7 +75,8 @@ public class TaskManagerService {
                     processName,
                     t.getAssignee(),
                     t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
-                    t.getProcessInstanceId()
+                    t.getProcessInstanceId(),
+                    null // 待辦任務不需要 currentAssignee，因為就是在自己身上
             );
             tasks.add(taskDto);
         }
@@ -94,7 +97,6 @@ public class TaskManagerService {
         List<HistoricTaskInstance> historicTasks = historyService.createHistoricTaskInstanceQuery()
                 .taskAssignee(assignee)
                 .finished()
-                // ★★★ 修正點：使用正確的方法名稱 orderByHistoricTaskInstanceEndTime ★★★
                 .orderByHistoricTaskInstanceEndTime().desc()
                 .list();
 
@@ -110,13 +112,35 @@ public class TaskManagerService {
                 // ignore
             }
 
+            // ★★★ 查詢流程目前狀態與當前處理人 ★★★
+            String currentAssignee = "流程已結束";
+            ProcessInstance pi = runtimeService.createProcessInstanceQuery()
+                    .processInstanceId(ht.getProcessInstanceId())
+                    .singleResult();
+
+            if (pi != null) {
+                // 如果流程實例還在 (Running)，查出目前停在哪個任務
+                List<Task> activeTasks = taskService.createTaskQuery()
+                        .processInstanceId(ht.getProcessInstanceId())
+                        .list();
+
+                if (!activeTasks.isEmpty()) {
+                    // 可能有多個並行任務，用逗號串接
+                    currentAssignee = activeTasks.stream()
+                            .map(t -> t.getAssignee() == null ? "待認領" : t.getAssignee())
+                            .distinct()
+                            .collect(Collectors.joining(", "));
+                }
+            }
+
             TaskDto taskDto = new TaskDto(
                     ht.getId(),
                     ht.getName(),
                     processName,
                     ht.getAssignee(),
                     ht.getEndTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
-                    ht.getProcessInstanceId()
+                    ht.getProcessInstanceId(),
+                    currentAssignee // ★★★ 填入當前處理人 ★★★
             );
             tasks.add(taskDto);
         }

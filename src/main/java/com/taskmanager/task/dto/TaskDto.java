@@ -14,16 +14,20 @@ public class TaskDto {
     // 用於前端查看流程圖
     private String processInstanceId;
 
+    // ★★★ 新增：當前處理人員 (用於經手任務) ★★★
+    private String currentAssignee;
+
     public TaskDto() {
     }
 
-    public TaskDto(String id, String name, String processName, String assignee, String createTime, String processInstanceId) {
+    public TaskDto(String id, String name, String processName, String assignee, String createTime, String processInstanceId, String currentAssignee) {
         this.id = id;
         this.name = name;
         this.processName = processName;
         this.assignee = assignee;
         this.createTime = createTime;
         this.processInstanceId = processInstanceId;
+        this.currentAssignee = currentAssignee;
     }
 
     public String getId() {
@@ -72,5 +76,13 @@ public class TaskDto {
 
     public void setProcessInstanceId(String processInstanceId) {
         this.processInstanceId = processInstanceId;
+    }
+
+    public String getCurrentAssignee() {
+        return currentAssignee;
+    }
+
+    public void setCurrentAssignee(String currentAssignee) {
+        this.currentAssignee = currentAssignee;
     }
 }
