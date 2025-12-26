@@ -45,18 +45,28 @@ class WorkflowServiceTest {
         when(runtimeService.startProcessInstanceByKey(eq("todoProcess"), anyMap()))
                 .thenReturn(mockInstance);
 
-        // 測試 startTodoProcess 方法
-        String processId = workflowService.startProcess("john");
+        // 測試 startProcess 方法
+        // ★★★ 修正：傳入 4 個參數 ★★★
+        String title = "Test Task";
+        String description = "Description";
+        String priority = "high";
+        String processId = workflowService.startProcess("john", title, description, priority);
 
         // 驗證 runtimeService 被正確呼叫
         ArgumentCaptor<String> processKeyCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
         verify(runtimeService).startProcessInstanceByKey(processKeyCaptor.capture(), variablesCaptor.capture());
 
-        // 驗證流程 ID
+        // 驗證流程 ID 與變數內容
         assertEquals("testProcess123", processId);
         assertEquals("todoProcess", processKeyCaptor.getValue());
-        assertEquals("john", variablesCaptor.getValue().get("assignee"));
+
+        Map<String, Object> capturedVariables = variablesCaptor.getValue();
+        assertEquals("john", capturedVariables.get("assignee"));
+        // ★★★ 新增：驗證新加入的變數 ★★★
+        assertEquals(title, capturedVariables.get("todoTitle"));
+        assertEquals(description, capturedVariables.get("description"));
+        assertEquals(priority, capturedVariables.get("priority"));
     }
 
     @Test
@@ -67,7 +77,6 @@ class WorkflowServiceTest {
         when(mockTask1.getName()).thenReturn("Review Task");
         when(mockTask2.getName()).thenReturn("Approval Task");
 
-        // **解決問題的關鍵**
         // Mock TaskQuery，確保 createTaskQuery() 不是 null
         TaskQuery mockTaskQuery = mock(TaskQuery.class);
         when(taskService.createTaskQuery()).thenReturn(mockTaskQuery);
