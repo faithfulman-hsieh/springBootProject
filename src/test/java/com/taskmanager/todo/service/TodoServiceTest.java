@@ -4,14 +4,12 @@ import com.taskmanager.todo.dto.TodoRequest;
 import com.taskmanager.todo.model.Todo;
 import com.taskmanager.todo.repository.TodoRepository;
 import com.taskmanager.workflow.service.WorkflowService;
-import org.activiti.engine.task.Task; // 記得 import Task
+import org.activiti.engine.task.Task;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
-import java.util.List;
 
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -38,7 +36,8 @@ class TodoServiceTest {
         todoRequest.setTitle("Test Todo");
         todoRequest.setDescription("This is a test todo.");
         todoRequest.setAssignee("john.doe");
-        todoRequest.setPriority("medium"); // 設定優先級
+        // 設定優先級
+        todoRequest.setPriority("medium");
 
         todo = new Todo("Test Todo", "This is a test todo.", "john.doe");
         todo.setId(1L);
@@ -49,11 +48,11 @@ class TodoServiceTest {
     @Test
     void testCreateTodo() {
         // 設定模擬行為
-        // ★★★ 修正 1：startProcess 參數匹配 (使用 anyString 或具體值) ★★★
+        // ★★★ 修正 1：startProcess 參數匹配 (使用 anyString) ★★★
         when(workflowService.startProcess(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn("process-12345");
 
-        // 模擬 getCurrentTask 回傳一個任務，避免 NullPointerException
+        // 模擬 getCurrentTask 回傳一個任務
         Task mockTask = mock(Task.class);
         when(mockTask.getProcessDefinitionId()).thenReturn("def-123");
         when(mockTask.getName()).thenReturn("TaskName");
@@ -99,10 +98,8 @@ class TodoServiceTest {
         when(mockTask.getName()).thenReturn("NextTask");
         when(mockTask.getAssignee()).thenReturn("john.doe");
 
-        // 模擬 complete 前後的 task 狀態
-        when(workflowService.getCurrentTask(todo.getProcessInstanceId()))
-                .thenReturn(mockTask); // 第一次呼叫 (complete 前)
-        //.thenReturn(null);   // 第二次呼叫 (complete 後，這裡簡化處理)
+        // 模擬呼叫
+        when(workflowService.getCurrentTask(todo.getProcessInstanceId())).thenReturn(mockTask);
 
         // 執行
         todoService.completeTodo(1L, "approve", "high");
