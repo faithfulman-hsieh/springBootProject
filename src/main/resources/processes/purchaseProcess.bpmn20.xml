@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:activiti="http://activiti.org/bpmn" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_Purchase" targetNamespace="http://bpmn.io/schema/bpmn" exporter="BPMN Modeler" exporterVersion="5.0.0">
+
+    <bpmn:process id="purchaseProcess" name="採購並行審核流程" isExecutable="true">
+
+        <bpmn:startEvent id="startEvent" name="填寫申請">
+            <bpmn:extensionElements>
+                <activiti:formProperty id="itemName" name="採購項目" type="string" required="true"/>
+                <activiti:formProperty id="amount" name="金額" type="long" required="true"/>
+
+                <activiti:formProperty id="managerAssignee" name="經理審核人" type="string" required="true" default="admin"/>
+                <activiti:formProperty id="financeAssignee" name="財務審核人" type="string" required="true" default="user"/>
+            </bpmn:extensionElements>
+            <bpmn:outgoing>Flow_StartToSplit</bpmn:outgoing>
+        </bpmn:startEvent>
+
+        <bpmn:parallelGateway id="parallelSplitGateway" name="分流" />
+
+        <bpmn:sequenceFlow id="Flow_StartToSplit" sourceRef="startEvent" targetRef="parallelSplitGateway"/>
+        <bpmn:sequenceFlow id="Flow_SplitToManager" sourceRef="parallelSplitGateway" targetRef="managerAuditTask"/>
+        <bpmn:sequenceFlow id="Flow_SplitToFinance" sourceRef="parallelSplitGateway" targetRef="financeAuditTask"/>
+
+        <bpmn:userTask id="managerAuditTask" name="經理審核" activiti:assignee="${managerAssignee}">
+            <bpmn:extensionElements>
+                <activiti:formProperty id="itemName" name="採購項目" type="string" writable="false"/>
+                <activiti:formProperty id="managerComment" name="經理意見" type="string" required="true"/>
+                <activiti:formProperty id="action" name="審核結果" type="enum" required="true" uiComponent="buttons">
+                    <activiti:value id="pass" name="通過"/>
+                    <activiti:value id="reject" name="駁回"/>
+                </activiti:formProperty>
+            </bpmn:extensionElements>
+            <bpmn:incoming>Flow_SplitToManager</bpmn:incoming>
+            <bpmn:outgoing>Flow_ManagerToJoin</bpmn:outgoing>
+        </bpmn:userTask>
+
+        <bpmn:userTask id="financeAuditTask" name="財務審核" activiti:assignee="${financeAssignee}">
+            <bpmn:extensionElements>
+                <activiti:formProperty id="amount" name="金額" type="long" writable="false"/>
+                <activiti:formProperty id="budgetCode" name="預算編號" type="string" required="true"/>
+                <activiti:formProperty id="actionFinance" name="財務確認" type="enum" required="true" uiComponent="buttons">
+                    <activiti:value id="ok" name="確認撥款"/>
+                    <activiti:value id="hold" name="暫緩"/>
+                </activiti:formProperty>
+            </bpmn:extensionElements>
+            <bpmn:incoming>Flow_SplitToFinance</bpmn:incoming>
+            <bpmn:outgoing>Flow_FinanceToJoin</bpmn:outgoing>
+        </bpmn:userTask>
+
+        <bpmn:parallelGateway id="parallelJoinGateway" name="匯合" />
+
+        <bpmn:sequenceFlow id="Flow_ManagerToJoin" sourceRef="managerAuditTask" targetRef="parallelJoinGateway"/>
+        <bpmn:sequenceFlow id="Flow_FinanceToJoin" sourceRef="financeAuditTask" targetRef="parallelJoinGateway"/>
+        <bpmn:sequenceFlow id="Flow_JoinToEnd" sourceRef="parallelJoinGateway" targetRef="endEvent"/>
+
+        <bpmn:endEvent id="endEvent" name="結束"/>
+
+    </bpmn:process>
+
+    <bpmndi:BPMNDiagram id="BPMNDiagram_Purchase">
+        <bpmndi:BPMNPlane id="BPMNPlane_Purchase" bpmnElement="purchaseProcess">
+
+            <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="startEvent">
+                <dc:Bounds x="180" y="200" width="36" height="36" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="178" y="243" width="44" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="ParallelSplit_di" bpmnElement="parallelSplitGateway">
+                <dc:Bounds x="270" y="193" width="50" height="50" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="285" y="250" width="22" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="ManagerTask_di" bpmnElement="managerAuditTask">
+                <dc:Bounds x="380" y="80" width="100" height="80" />
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="FinanceTask_di" bpmnElement="financeAuditTask">
+                <dc:Bounds x="380" y="300" width="100" height="80" />
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="ParallelJoin_di" bpmnElement="parallelJoinGateway">
+                <dc:Bounds x="540" y="193" width="50" height="50" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="555" y="250" width="22" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="EndEvent_di" bpmnElement="endEvent">
+                <dc:Bounds x="650" y="200" width="36" height="36" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="658" y="243" width="22" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNEdge id="Flow_StartToSplit_di" bpmnElement="Flow_StartToSplit">
+                <di:waypoint x="216" y="218" />
+                <di:waypoint x="270" y="218" />
+            </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="Flow_SplitToManager_di" bpmnElement="Flow_SplitToManager">
+                <di:waypoint x="295" y="193" />
+                <di:waypoint x="295" y="120" />
+                <di:waypoint x="380" y="120" />
+            </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="Flow_SplitToFinance_di" bpmnElement="Flow_SplitToFinance">
+                <di:waypoint x="295" y="243" />
+                <di:waypoint x="295" y="340" />
+                <di:waypoint x="380" y="340" />
+            </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="Flow_ManagerToJoin_di" bpmnElement="Flow_ManagerToJoin">
+                <di:waypoint x="480" y="120" />
+                <di:waypoint x="565" y="120" />
+                <di:waypoint x="565" y="193" />
+            </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="Flow_FinanceToJoin_di" bpmnElement="Flow_FinanceToJoin">
+                <di:waypoint x="480" y="340" />
+                <di:waypoint x="565" y="340" />
+                <di:waypoint x="565" y="243" />
+            </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="Flow_JoinToEnd_di" bpmnElement="Flow_JoinToEnd">
+                <di:waypoint x="590" y="218" />
+                <di:waypoint x="650" y="218" />
+            </bpmndi:BPMNEdge>
+
+        </bpmndi:BPMNPlane>
+    </bpmndi:BPMNDiagram>
+</bpmn:definitions>

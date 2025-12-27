@@ -14,12 +14,12 @@ import org.activiti.engine.history.HistoricProcessInstance;
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
-import org.springframework.core.io.ClassPathResource; // ★★★ 新增 Import
-import org.springframework.core.io.Resource;      // ★★★ 新增 Import
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.FileNotFoundException; // ★★★ 新增 Import
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -53,8 +53,6 @@ public class ProcessService {
         this.taskService = taskService;
         this.historyService = historyService;
     }
-
-    // ... (其他原有方法 getAllDefinitions, deployProcess 等保持不變) ...
 
     public List<ProcessDef> getAllDefinitions() {
         try {
@@ -146,17 +144,22 @@ public class ProcessService {
                     currentUserId = auth.getName();
                 }
             } catch (Exception e) {
-                // 忽略 Context 錯誤，使用預設值
+                // 忽略 Context 錯誤
             }
 
             ProcessInstance instance = runtimeService.startProcessInstanceById(processDefinitionId, variables);
 
-            Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
+            // ★★★ 修正：改用 list() 處理並行任務的情況 ★★★
+            List<Task> tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
 
-            if (task != null && task.getAssignee() == null) {
-                taskService.setAssignee(task.getId(), currentUserId);
-                task = taskService.createTaskQuery().taskId(task.getId()).singleResult();
+            // 若任務無指派人，幫忙指派給發起人 (這裡簡單處理：指派給所有無主的任務)
+            for (Task t : tasks) {
+                if (t.getAssignee() == null) {
+                    taskService.setAssignee(t.getId(), currentUserId);
+                }
             }
+            // 重新查詢以確保獲取最新狀態 (或直接使用記憶體中的資料更新顯示)
+            tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
 
             ProcessIns processIns = new ProcessIns();
             processIns.setId(instance.getId());
@@ -164,8 +167,17 @@ public class ProcessService {
             processIns.setStatus("running");
             processIns.setProcessDefinitionId(processDefinitionId);
             processIns.setStartTime(LocalDateTime.now().format(FORMATTER));
-            processIns.setCurrentTask(task != null ? task.getName() : null);
-            processIns.setAssignee(task != null ? task.getAssignee() : null);
+
+            // ★★★ 修正：串接多個任務名稱與指派人 ★★★
+            if (tasks.isEmpty()) {
+                processIns.setCurrentTask("Completed");
+                processIns.setAssignee(null);
+            } else {
+                String taskNames = tasks.stream().map(Task::getName).collect(Collectors.joining(", "));
+                String assignees = tasks.stream().map(t -> t.getAssignee() == null ? "待認領" : t.getAssignee()).collect(Collectors.joining(", "));
+                processIns.setCurrentTask(taskNames);
+                processIns.setAssignee(assignees);
+            }
 
             return instanceRepository.save(processIns);
         } catch (Exception e) {
@@ -178,7 +190,8 @@ public class ProcessService {
             List<ProcessInstance> instances = runtimeService.createProcessInstanceQuery().list();
             List<ProcessIns> processInsList = new ArrayList<>();
             for (ProcessInstance instance : instances) {
-                Task task = taskService.createTaskQuery().processInstanceId(instance.getId()).singleResult();
+                // ★★★ 修正：改用 list() 處理並行任務 ★★★
+                List<Task> tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
 
                 ProcessIns processIns = new ProcessIns();
                 processIns.setId(instance.getId());
@@ -187,8 +200,16 @@ public class ProcessService {
                 processIns.setProcessDefinitionId(instance.getProcessDefinitionId());
                 processIns.setStartTime(LocalDateTime.ofInstant(instance.getStartTime().toInstant(),
                         java.time.ZoneId.systemDefault()).format(FORMATTER));
-                processIns.setCurrentTask(task != null ? task.getName() : "Completed");
-                processIns.setAssignee(task != null ? task.getAssignee() : null);
+
+                if (tasks.isEmpty()) {
+                    processIns.setCurrentTask("Completed");
+                    processIns.setAssignee(null);
+                } else {
+                    String taskNames = tasks.stream().map(Task::getName).collect(Collectors.joining(", "));
+                    String assignees = tasks.stream().map(t -> t.getAssignee() == null ? "待認領" : t.getAssignee()).collect(Collectors.joining(", "));
+                    processIns.setCurrentTask(taskNames);
+                    processIns.setAssignee(assignees);
+                }
 
                 processInsList.add(processIns);
                 instanceRepository.save(processIns);
@@ -216,8 +237,11 @@ public class ProcessService {
 
             if (instance != null) {
                 processDefinitionId = instance.getProcessDefinitionId();
-                Task task = taskService.createTaskQuery().processInstanceId(instanceId).singleResult();
-                currentTaskKey = (task != null) ? task.getTaskDefinitionKey() : null;
+                // ★★★ 修正：處理並行任務的高亮顯示 (這裡暫時取第一個，若前端支援 array 可改傳 list) ★★★
+                List<Task> tasks = taskService.createTaskQuery().processInstanceId(instanceId).list();
+                if (!tasks.isEmpty()) {
+                    currentTaskKey = tasks.get(0).getTaskDefinitionKey();
+                }
             } else {
                 HistoricProcessInstance historicInstance = historyService.createHistoricProcessInstanceQuery()
                         .processInstanceId(instanceId)
@@ -440,10 +464,8 @@ public class ProcessService {
         }
     }
 
-    // ★★★ 新增：讀取流程範本檔案 ★★★
     public Resource getProcessTemplate(String filename) {
         try {
-            // 讀取 resources/processes/ 目錄下的檔案
             Resource resource = new ClassPathResource("processes/" + filename);
             if (!resource.exists()) {
                 throw new FileNotFoundException("範本檔案不存在：" + filename);

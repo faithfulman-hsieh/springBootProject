@@ -19,14 +19,9 @@ public class WorkflowService {
         this.taskService = taskService;
     }
 
-    /**
-     * ★★★ 修正：增加參數 title, description, priority ★★★
-     */
     public String startProcess(String assignee, String title, String description, String priority) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("assignee", assignee);
-
-        // ★★★ 關鍵：必須把這些資料存入流程變數，getTaskForm 才能讀取到並回傳給前端 ★★★
         variables.put("todoTitle", title);
         variables.put("description", description);
         variables.put("priority", priority != null ? priority : "medium");
@@ -34,15 +29,27 @@ public class WorkflowService {
         return runtimeService.startProcessInstanceByKey("todoProcess", variables).getProcessInstanceId();
     }
 
+    // ★★★ 新增：支援任意流程啟動的通用方法 ★★★
+    public String startProcessByKey(String processDefinitionKey, Map<String, Object> variables) {
+        return runtimeService.startProcessInstanceByKey(processDefinitionKey, variables).getId();
+    }
+
     public List<String> getUserTasks(String assignee) {
         List<Task> tasks = taskService.createTaskQuery().taskAssignee(assignee).list();
         return tasks.stream().map(Task::getName).collect(Collectors.toList());
     }
 
+    // ★★★ 修正：使用 list() 以避免並行流程導致 singleResult 報錯 ★★★
     public Task getCurrentTask(String processInstanceId) {
-        return taskService.createTaskQuery()
+        List<Task> tasks = taskService.createTaskQuery()
                 .processInstanceId(processInstanceId)
-                .singleResult();
+                .list();
+
+        // 如果有多個任務，回傳第一個以保持相容性，避免系統崩潰
+        if (tasks != null && !tasks.isEmpty()) {
+            return tasks.get(0);
+        }
+        return null;
     }
 
     public void completeTask(String taskId, String action, String priority) {
