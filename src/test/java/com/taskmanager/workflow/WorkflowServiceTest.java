@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.*;
 
 class WorkflowServiceTest {
@@ -36,79 +37,63 @@ class WorkflowServiceTest {
     }
 
     @Test
-    void testStartTodoProcess() {
-        // 模擬 ProcessInstance，回傳 ID
+    void testStartProcess() {
+        // 模擬 ProcessInstance
         ProcessInstance mockInstance = mock(ProcessInstance.class);
-        when(mockInstance.getId()).thenReturn("testProcess123");
+        when(mockInstance.getId()).thenReturn("proc-123");
+        when(mockInstance.getProcessInstanceId()).thenReturn("proc-123");
 
-        // 模擬啟動流程
+        // 模擬 runtimeService
         when(runtimeService.startProcessInstanceByKey(eq("todoProcess"), anyMap()))
                 .thenReturn(mockInstance);
 
-        // 測試 startProcess 方法
-        // ★★★ 修正：傳入 4 個參數 ★★★
-        String title = "Test Task";
-        String description = "Description";
-        String priority = "high";
-        String processId = workflowService.startProcess("john", title, description, priority);
+        // ★★★ 修正：呼叫時傳入 4 個參數 ★★★
+        String processId = workflowService.startProcess("user", "Title", "Desc", "High");
 
-        // 驗證 runtimeService 被正確呼叫
-        ArgumentCaptor<String> processKeyCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(runtimeService).startProcessInstanceByKey(processKeyCaptor.capture(), variablesCaptor.capture());
+        assertEquals("proc-123", processId);
 
-        // 驗證流程 ID 與變數內容
-        assertEquals("testProcess123", processId);
-        assertEquals("todoProcess", processKeyCaptor.getValue());
+        // 驗證參數傳遞
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(runtimeService).startProcessInstanceByKey(eq("todoProcess"), captor.capture());
 
-        Map<String, Object> capturedVariables = variablesCaptor.getValue();
-        assertEquals("john", capturedVariables.get("assignee"));
-        // ★★★ 新增：驗證新加入的變數 ★★★
-        assertEquals(title, capturedVariables.get("todoTitle"));
-        assertEquals(description, capturedVariables.get("description"));
-        assertEquals(priority, capturedVariables.get("priority"));
+        Map<String, Object> vars = captor.getValue();
+        assertEquals("user", vars.get("assignee"));
+        assertEquals("Title", vars.get("todoTitle"));
+        assertEquals("Desc", vars.get("description"));
+        assertEquals("High", vars.get("priority"));
     }
 
     @Test
-    void testGetUserTasks() {
-        // 模擬 Task
-        Task mockTask1 = mock(Task.class);
-        Task mockTask2 = mock(Task.class);
-        when(mockTask1.getName()).thenReturn("Review Task");
-        when(mockTask2.getName()).thenReturn("Approval Task");
+    void testGetCurrentTask() {
+        // 模擬 TaskQuery 鏈式呼叫
+        TaskQuery mockQuery = mock(TaskQuery.class);
+        when(taskService.createTaskQuery()).thenReturn(mockQuery);
+        when(mockQuery.processInstanceId(anyString())).thenReturn(mockQuery);
 
-        // Mock TaskQuery，確保 createTaskQuery() 不是 null
-        TaskQuery mockTaskQuery = mock(TaskQuery.class);
-        when(taskService.createTaskQuery()).thenReturn(mockTaskQuery);
-        when(mockTaskQuery.taskAssignee("john")).thenReturn(mockTaskQuery);
-        when(mockTaskQuery.list()).thenReturn(List.of(mockTask1, mockTask2));
+        Task mockTask = mock(Task.class);
+        when(mockTask.getName()).thenReturn("TestTask");
 
-        // 測試 getUserTasks 方法
-        List<String> taskNames = workflowService.getUserTasks("john");
+        // ★★★ 關鍵修正：模擬 list() 而不是 singleResult() ★★★
+        // 因為我們在 Service 裡改用了 .list() 來支援並行任務
+        when(mockQuery.list()).thenReturn(List.of(mockTask));
 
-        // 驗證回傳的 Task 名稱
-        assertEquals(2, taskNames.size());
-        assertEquals("Review Task", taskNames.get(0));
-        assertEquals("Approval Task", taskNames.get(1));
+        Task result = workflowService.getCurrentTask("proc-123");
 
-        // 驗證是否有正確呼叫 taskService.createTaskQuery()
-        verify(taskService).createTaskQuery();
-        verify(mockTaskQuery).taskAssignee("john");
-        verify(mockTaskQuery).list();
+        assertNotNull(result);
+        assertEquals("TestTask", result.getName());
+
+        // 驗證呼叫了 list()
+        verify(mockQuery).list();
     }
 
     @Test
     void testCompleteTask() {
-        // 測試 completeTask 方法
-        workflowService.completeTask("task123", "approve", "high");
+        workflowService.completeTask("task-1", "approve", "high");
 
-        // 驗證 taskService.complete 是否正確呼叫
-        ArgumentCaptor<String> taskIdCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Map<String, Object>> variablesCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(taskService).complete(taskIdCaptor.capture(), variablesCaptor.capture());
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(taskService).complete(eq("task-1"), captor.capture());
 
-        assertEquals("task123", taskIdCaptor.getValue());
-        assertEquals("approve", variablesCaptor.getValue().get("action"));
-        assertEquals("high", variablesCaptor.getValue().get("priority"));
+        assertEquals("approve", captor.getValue().get("action"));
+        assertEquals("high", captor.getValue().get("priority"));
     }
 }
