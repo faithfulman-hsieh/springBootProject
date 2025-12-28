@@ -1,6 +1,6 @@
 package com.taskmanager.process.service;
 
-import com.taskmanager.process.dto.HistoryLog; // ★★★ 新增：為了歷程功能
+import com.taskmanager.process.dto.HistoryLog; // ★★★ 新增 Import
 import com.taskmanager.process.model.ProcessDef;
 import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.repository.ProcessDefRepository;
@@ -19,7 +19,7 @@ import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
 import org.activiti.engine.history.HistoricActivityInstance;
 import org.activiti.engine.history.HistoricProcessInstance;
-import org.activiti.engine.history.HistoricVariableInstance; // ★★★ 新增：為了查詢歷史變數
+import org.activiti.engine.history.HistoricVariableInstance; // ★★★ 新增 Import
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
@@ -31,7 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration; // ★★★ 新增：為了計算耗時
+import java.time.Duration; // ★★★ 新增 Import
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -51,7 +51,7 @@ public class ProcessService {
     private final TaskService taskService;
     private final HistoryService historyService;
 
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"); // 微調格式顯示時間
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public ProcessService(ProcessDefRepository definitionRepository, ProcessInsRepository instanceRepository,
                           RepositoryService repositoryService, RuntimeService runtimeService, TaskService taskService,
@@ -318,6 +318,41 @@ public class ProcessService {
         }
     }
 
+    // 參數是 org.activiti.bpmn.model.FormProperty
+    private List<Map<String, Object>> convertFormProperties(List<FormProperty> formProperties) {
+        List<Map<String, Object>> formFields = new ArrayList<>();
+
+        for (FormProperty prop : formProperties) {
+            Map<String, Object> field = new HashMap<>();
+            field.put("key", prop.getId());
+            field.put("label", prop.getName() != null ? prop.getName() : prop.getId());
+
+            String type = prop.getType() != null ? prop.getType() : "string";
+            field.put("type", mapFormPropertyType(type));
+
+            field.put("required", prop.isRequired());
+            field.put("disabled", !prop.isWriteable());
+
+            // 讀取預設值
+            if (prop.getDefaultExpression() != null) {
+                field.put("value", prop.getDefaultExpression());
+            }
+
+            if ("enum".equals(type)) {
+                List<Map<String, String>> options = new ArrayList<>();
+                for (FormValue val : prop.getFormValues()) {
+                    Map<String, String> option = new HashMap<>();
+                    option.put("label", val.getName());
+                    option.put("value", val.getId());
+                    options.add(option);
+                }
+                field.put("options", options);
+            }
+            formFields.add(field);
+        }
+        return formFields;
+    }
+
     public List<Map<String, String>> getUsers() {
         try {
             List<Map<String, String>> users = new ArrayList<>();
@@ -368,9 +403,7 @@ public class ProcessService {
 
     public void reassignTask(String processInstanceId, String newAssignee) {
         try {
-            Task task = taskService.createTaskQuery()
-                    .processInstanceId(processInstanceId)
-                    .singleResult();
+            Task task = taskService.createTaskQuery().processInstanceId(processInstanceId).singleResult();
             if (task == null) {
                 throw new IllegalArgumentException("當前流程實例無活動任務：" + processInstanceId);
             }
@@ -390,16 +423,12 @@ public class ProcessService {
 
     public void jumpToNode(String processInstanceId, String targetNode) {
         try {
-            ProcessInstance instance = runtimeService.createProcessInstanceQuery()
-                    .processInstanceId(processInstanceId)
-                    .singleResult();
+            ProcessInstance instance = runtimeService.createProcessInstanceQuery().processInstanceId(processInstanceId).singleResult();
             if (instance == null) {
                 throw new IllegalArgumentException("流程實例不存在：" + processInstanceId);
             }
 
-            Task currentTask = taskService.createTaskQuery()
-                    .processInstanceId(processInstanceId)
-                    .singleResult();
+            Task currentTask = taskService.createTaskQuery().processInstanceId(processInstanceId).singleResult();
             if (currentTask == null) {
                 throw new IllegalArgumentException("當前流程實例無活動任務：" + processInstanceId);
             }
@@ -443,40 +472,6 @@ public class ProcessService {
         }
     }
 
-    private List<Map<String, Object>> convertFormProperties(List<FormProperty> formProperties) {
-        List<Map<String, Object>> formFields = new ArrayList<>();
-
-        for (FormProperty prop : formProperties) {
-            Map<String, Object> field = new HashMap<>();
-            field.put("key", prop.getId());
-            field.put("label", prop.getName() != null ? prop.getName() : prop.getId());
-
-            String type = prop.getType() != null ? prop.getType() : "string";
-            field.put("type", mapFormPropertyType(type));
-
-            field.put("required", prop.isRequired());
-            field.put("disabled", !prop.isWriteable());
-
-            // 讀取預設值
-            if (prop.getDefaultExpression() != null) {
-                field.put("value", prop.getDefaultExpression());
-            }
-
-            if ("enum".equals(type)) {
-                List<Map<String, String>> options = new ArrayList<>();
-                for (FormValue val : prop.getFormValues()) {
-                    Map<String, String> option = new HashMap<>();
-                    option.put("label", val.getName());
-                    option.put("value", val.getId());
-                    options.add(option);
-                }
-                field.put("options", options);
-            }
-            formFields.add(field);
-        }
-        return formFields;
-    }
-
     private String mapFormPropertyType(String activitiType) {
         switch (activitiType) {
             case "string": return "text";
@@ -488,7 +483,7 @@ public class ProcessService {
         }
     }
 
-    // ★★★ 新增：獲取流程歷程 (Timeline) 邏輯 ★★★
+    // ★★★ 新增：獲取流程歷程 (Timeline) 邏輯，並優化顯示名稱 ★★★
     public List<HistoryLog> getProcessHistory(String processInstanceId) {
         try {
             List<HistoricActivityInstance> activities = historyService.createHistoricActivityInstanceQuery()
@@ -515,12 +510,12 @@ public class ProcessService {
 
                 HistoryLog log = new HistoryLog();
 
-                // 處理節點名稱，避免顯示 null
+                // ★★★ 修正點：若名稱為 null，根據類型給予預設名稱，避免顯示「系統作業」 ★★★
                 String name = activity.getActivityName();
-                if (name == null) {
+                if (name == null || name.isEmpty()) {
                     if ("startEvent".equals(activity.getActivityType())) name = "流程發起";
                     else if ("endEvent".equals(activity.getActivityType())) name = "流程結束";
-                    else name = "未命名節點";
+                    else name = "系統節點";
                 }
                 log.setActivityName(name);
 
@@ -540,7 +535,6 @@ public class ProcessService {
                     log.setDuration("-");
                 }
 
-                // 如果是 UserTask，附帶變數資訊
                 if ("userTask".equals(activity.getActivityType())) {
                     log.setVariables(globalVars);
                 }

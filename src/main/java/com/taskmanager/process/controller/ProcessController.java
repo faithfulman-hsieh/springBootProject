@@ -1,7 +1,7 @@
 package com.taskmanager.process.controller;
 
-import com.taskmanager.process.dto.HistoryLog; // ★★★ 新增 Import
 import com.taskmanager.process.dto.ProcessRequest;
+import com.taskmanager.process.dto.HistoryLog; // ★★★ 新增 Import
 import com.taskmanager.process.model.ProcessDef;
 import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.service.ProcessService;
@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -206,7 +207,7 @@ public class ProcessController {
                 .body(resource);
     }
 
-    // ★★★ 新增：歷史紀錄查詢 API (路徑與 instances/{id}/diagram 風格一致) ★★★
+    // ★★★ 新增：歷史紀錄查詢 API ★★★
     @GetMapping("/instances/{id}/history")
     @Operation(summary = "Get process history", description = "Retrieves execution history for a process instance")
     @ApiResponses(value = {
