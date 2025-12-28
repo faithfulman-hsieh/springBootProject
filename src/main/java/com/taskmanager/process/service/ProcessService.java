@@ -1,5 +1,6 @@
 package com.taskmanager.process.service;
 
+import com.taskmanager.process.dto.HistoryLog; // ★★★ 新增：為了歷程功能
 import com.taskmanager.process.model.ProcessDef;
 import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.repository.ProcessDefRepository;
@@ -18,6 +19,7 @@ import org.activiti.engine.RuntimeService;
 import org.activiti.engine.TaskService;
 import org.activiti.engine.history.HistoricActivityInstance;
 import org.activiti.engine.history.HistoricProcessInstance;
+import org.activiti.engine.history.HistoricVariableInstance; // ★★★ 新增：為了查詢歷史變數
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
@@ -29,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration; // ★★★ 新增：為了計算耗時
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -48,7 +51,7 @@ public class ProcessService {
     private final TaskService taskService;
     private final HistoryService historyService;
 
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"); // 微調格式顯示時間
 
     public ProcessService(ProcessDefRepository definitionRepository, ProcessInsRepository instanceRepository,
                           RepositoryService repositoryService, RuntimeService runtimeService, TaskService taskService,
@@ -103,7 +106,7 @@ public class ProcessService {
             processDef.setName(name);
             processDef.setVersion(activitiDef.getVersion() + ".0");
             processDef.setStatus("active");
-            processDef.setDeploymentTime(LocalDateTime.now().format(FORMATTER));
+            processDef.setDeploymentTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
             processDef.setProcessDefinitionId(activitiDef.getId());
 
             return definitionRepository.save(processDef);
@@ -284,8 +287,15 @@ public class ProcessService {
         try {
             org.activiti.engine.repository.ProcessDefinition processDefinition = repositoryService
                     .createProcessDefinitionQuery()
-                    .processDefinitionId(processDefinitionId)
+                    .deploymentId(processDefinitionId)
                     .singleResult();
+
+            if (processDefinition == null) {
+                processDefinition = repositoryService
+                        .createProcessDefinitionQuery()
+                        .processDefinitionId(processDefinitionId)
+                        .singleResult();
+            }
 
             if (processDefinition == null) {
                 throw new IllegalArgumentException("流程定義不存在：" + processDefinitionId);
@@ -308,7 +318,131 @@ public class ProcessService {
         }
     }
 
-    // 參數是 org.activiti.bpmn.model.FormProperty
+    public List<Map<String, String>> getUsers() {
+        try {
+            List<Map<String, String>> users = new ArrayList<>();
+            Map<String, String> user1 = new HashMap<>();
+            user1.put("label", "張三");
+            user1.put("value", "zhangsan");
+            Map<String, String> user2 = new HashMap<>();
+            user2.put("label", "李四");
+            user2.put("value", "lisi");
+            users.add(user1);
+            users.add(user2);
+            return users;
+        } catch (Exception e) {
+            throw new IllegalStateException("獲取用戶列表失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public List<Map<String, String>> getFlowNodes(String processInstanceId) {
+        try {
+            ProcessInstance instance = runtimeService.createProcessInstanceQuery().processInstanceId(processInstanceId).singleResult();
+            if (instance == null) {
+                throw new IllegalArgumentException("流程實例不存在：" + processInstanceId);
+            }
+
+            BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
+            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
+
+            List<Map<String, String>> nodes = process.getFlowElements().stream()
+                    .filter(element -> element instanceof UserTask || element instanceof ServiceTask)
+                    .map(element -> {
+                        Map<String, String> node = new HashMap<>();
+                        node.put("id", element.getId());
+                        node.put("name", element.getName() != null ? element.getName() : element.getId());
+                        return node;
+                    })
+                    .collect(Collectors.toList());
+
+            if (nodes.isEmpty()) {
+                throw new IllegalArgumentException("流程中無可用節點：" + processInstanceId);
+            }
+            return nodes;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("獲取流程節點失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public void reassignTask(String processInstanceId, String newAssignee) {
+        try {
+            Task task = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (task == null) {
+                throw new IllegalArgumentException("當前流程實例無活動任務：" + processInstanceId);
+            }
+
+            taskService.setAssignee(task.getId(), newAssignee);
+
+            ProcessIns processIns = instanceRepository.findById(processInstanceId)
+                    .orElseThrow(() -> new IllegalArgumentException("流程實例不存在：" + processInstanceId));
+            processIns.setAssignee(newAssignee);
+            instanceRepository.save(processIns);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("任務重新分配失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public void jumpToNode(String processInstanceId, String targetNode) {
+        try {
+            ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (instance == null) {
+                throw new IllegalArgumentException("流程實例不存在：" + processInstanceId);
+            }
+
+            Task currentTask = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            if (currentTask == null) {
+                throw new IllegalArgumentException("當前流程實例無活動任務：" + processInstanceId);
+            }
+
+            BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
+            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
+            process.getFlowElements().stream()
+                    .filter(element -> element.getId().equals(targetNode))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("目標節點不存在：" + targetNode));
+
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("targetActivityId", targetNode);
+
+            taskService.complete(currentTask.getId(), variables);
+
+            Task newTask = taskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult();
+            ProcessIns processIns = instanceRepository.findById(processInstanceId)
+                    .orElseThrow(() -> new IllegalArgumentException("流程實例不存在：" + processInstanceId));
+            processIns.setCurrentTask(newTask != null ? newTask.getName() : "Completed");
+            processIns.setAssignee(newTask != null ? newTask.getAssignee() : null);
+            instanceRepository.save(processIns);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("節點跳轉失敗：" + e.getMessage(), e);
+        }
+    }
+
+    public Resource getProcessTemplate(String filename) {
+        try {
+            Resource resource = new ClassPathResource("processes/" + filename);
+            if (!resource.exists()) {
+                throw new FileNotFoundException("範本檔案不存在：" + filename);
+            }
+            return resource;
+        } catch (Exception e) {
+            throw new IllegalStateException("讀取範本失敗：" + e.getMessage(), e);
+        }
+    }
+
     private List<Map<String, Object>> convertFormProperties(List<FormProperty> formProperties) {
         List<Map<String, Object>> formFields = new ArrayList<>();
 
@@ -317,14 +451,13 @@ public class ProcessService {
             field.put("key", prop.getId());
             field.put("label", prop.getName() != null ? prop.getName() : prop.getId());
 
-            // ★★★ 修正：prop.getType() 回傳的就是 String，不需要再 .getName() ★★★
             String type = prop.getType() != null ? prop.getType() : "string";
             field.put("type", mapFormPropertyType(type));
 
             field.put("required", prop.isRequired());
             field.put("disabled", !prop.isWriteable());
 
-            // ★★★ 修正：使用 getDefaultExpression() 取得預設值 ★★★
+            // 讀取預設值
             if (prop.getDefaultExpression() != null) {
                 field.put("value", prop.getDefaultExpression());
             }
@@ -344,64 +477,6 @@ public class ProcessService {
         return formFields;
     }
 
-    // ... (getUsers, getFlowNodes, reassignTask, jumpToNode, getProcessTemplate, mapFormPropertyType 保持不變) ...
-    public List<Map<String, String>> getUsers() {
-        try {
-            List<Map<String, String>> users = new ArrayList<>();
-            Map<String, String> user1 = new HashMap<>(); user1.put("label", "張三"); user1.put("value", "zhangsan");
-            Map<String, String> user2 = new HashMap<>(); user2.put("label", "李四"); user2.put("value", "lisi");
-            users.add(user1); users.add(user2);
-            return users;
-        } catch (Exception e) { throw new IllegalStateException(e.getMessage()); }
-    }
-
-    public List<Map<String, String>> getFlowNodes(String processInstanceId) {
-        try {
-            ProcessInstance instance = runtimeService.createProcessInstanceQuery().processInstanceId(processInstanceId).singleResult();
-            if (instance == null) throw new IllegalArgumentException("流程實例不存在");
-            BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
-            org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
-            return process.getFlowElements().stream()
-                    .filter(e -> e instanceof UserTask || e instanceof ServiceTask)
-                    .map(e -> { Map<String, String> n = new HashMap<>(); n.put("id", e.getId()); n.put("name", e.getName()); return n; })
-                    .collect(Collectors.toList());
-        } catch (Exception e) { throw new IllegalStateException(e.getMessage()); }
-    }
-
-    public void reassignTask(String processInstanceId, String newAssignee) {
-        try {
-            Task task = taskService.createTaskQuery().processInstanceId(processInstanceId).singleResult();
-            if (task == null) throw new IllegalArgumentException("無活動任務");
-            taskService.setAssignee(task.getId(), newAssignee);
-            ProcessIns ins = instanceRepository.findById(processInstanceId).orElseThrow();
-            ins.setAssignee(newAssignee);
-            instanceRepository.save(ins);
-        } catch (Exception e) { throw new IllegalStateException(e.getMessage()); }
-    }
-
-    public void jumpToNode(String processInstanceId, String targetNode) {
-        try {
-            ProcessInstance instance = runtimeService.createProcessInstanceQuery().processInstanceId(processInstanceId).singleResult();
-            if (instance == null) throw new IllegalArgumentException("流程實例不存在");
-            Task task = taskService.createTaskQuery().processInstanceId(processInstanceId).singleResult();
-            Map<String, Object> vars = new HashMap<>();
-            vars.put("targetActivityId", targetNode);
-            taskService.complete(task.getId(), vars);
-            Task newTask = taskService.createTaskQuery().processInstanceId(processInstanceId).singleResult();
-            ProcessIns ins = instanceRepository.findById(processInstanceId).orElseThrow();
-            ins.setCurrentTask(newTask != null ? newTask.getName() : "Completed");
-            instanceRepository.save(ins);
-        } catch (Exception e) { throw new IllegalStateException(e.getMessage()); }
-    }
-
-    public Resource getProcessTemplate(String filename) {
-        try {
-            Resource resource = new ClassPathResource("processes/" + filename);
-            if (!resource.exists()) throw new FileNotFoundException("檔案不存在");
-            return resource;
-        } catch (Exception e) { throw new IllegalStateException(e.getMessage()); }
-    }
-
     private String mapFormPropertyType(String activitiType) {
         switch (activitiType) {
             case "string": return "text";
@@ -411,5 +486,84 @@ public class ProcessService {
             case "boolean": return "switch";
             default: return "text";
         }
+    }
+
+    // ★★★ 新增：獲取流程歷程 (Timeline) 邏輯 ★★★
+    public List<HistoryLog> getProcessHistory(String processInstanceId) {
+        try {
+            List<HistoricActivityInstance> activities = historyService.createHistoricActivityInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .orderByHistoricActivityInstanceStartTime().asc()
+                    .list();
+
+            List<HistoricVariableInstance> historyVariables = historyService.createHistoricVariableInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .list();
+
+            Map<String, Object> globalVars = historyVariables.stream()
+                    .collect(Collectors.toMap(HistoricVariableInstance::getVariableName, HistoricVariableInstance::getValue, (v1, v2) -> v2));
+
+            List<HistoryLog> historyLogs = new ArrayList<>();
+
+            for (HistoricActivityInstance activity : activities) {
+                // 過濾掉不需顯示的內部節點
+                if (!"startEvent".equals(activity.getActivityType()) &&
+                        !"endEvent".equals(activity.getActivityType()) &&
+                        !"userTask".equals(activity.getActivityType())) {
+                    continue;
+                }
+
+                HistoryLog log = new HistoryLog();
+
+                // 處理節點名稱，避免顯示 null
+                String name = activity.getActivityName();
+                if (name == null) {
+                    if ("startEvent".equals(activity.getActivityType())) name = "流程發起";
+                    else if ("endEvent".equals(activity.getActivityType())) name = "流程結束";
+                    else name = "未命名節點";
+                }
+                log.setActivityName(name);
+
+                log.setActivityType(activity.getActivityType());
+                log.setAssignee(activity.getAssignee());
+
+                if (activity.getStartTime() != null) {
+                    log.setStartTime(LocalDateTime.ofInstant(activity.getStartTime().toInstant(), java.time.ZoneId.systemDefault()).format(FORMATTER));
+                }
+
+                if (activity.getEndTime() != null) {
+                    log.setEndTime(LocalDateTime.ofInstant(activity.getEndTime().toInstant(), java.time.ZoneId.systemDefault()).format(FORMATTER));
+                    log.setStatus("Completed");
+                    log.setDuration(formatDuration(activity.getDurationInMillis()));
+                } else {
+                    log.setStatus("Running");
+                    log.setDuration("-");
+                }
+
+                // 如果是 UserTask，附帶變數資訊
+                if ("userTask".equals(activity.getActivityType())) {
+                    log.setVariables(globalVars);
+                }
+
+                historyLogs.add(log);
+            }
+            return historyLogs;
+        } catch (Exception e) {
+            throw new IllegalStateException("獲取歷史紀錄失敗：" + e.getMessage(), e);
+        }
+    }
+
+    private String formatDuration(Long durationInMillis) {
+        if (durationInMillis == null) return "";
+        Duration duration = Duration.ofMillis(durationInMillis);
+        long days = duration.toDays();
+        long hours = duration.toHours() % 24;
+        long minutes = duration.toMinutes() % 60;
+
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) sb.append(days).append("天 ");
+        if (hours > 0) sb.append(hours).append("時 ");
+        sb.append(minutes).append("分");
+        return sb.toString().isEmpty() ? "1分內" : sb.toString();
     }
 }
