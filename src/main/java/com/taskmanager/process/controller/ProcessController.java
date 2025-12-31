@@ -1,10 +1,11 @@
 package com.taskmanager.process.controller;
 
 import com.taskmanager.process.dto.ProcessRequest;
-import com.taskmanager.process.dto.HistoryLog; // ★★★ 新增 Import
+import com.taskmanager.process.dto.HistoryLog;
 import com.taskmanager.process.model.ProcessDef;
 import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.service.ProcessService;
+import com.taskmanager.task.dto.TaskJumpRequest; // 引用 DTO
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -95,6 +96,17 @@ public class ProcessController {
         return ResponseEntity.ok(processService.getAllInstances());
     }
 
+    @GetMapping("/my-instances")
+    @Operation(summary = "Get my process instances", description = "Retrieves process instances started by current user")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProcessIns.class))),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<List<ProcessIns>> getMyProcessInstances() {
+        return ResponseEntity.ok(processService.getMyProcessInstances());
+    }
+
     @GetMapping("/instances/{id}/diagram")
     @Operation(summary = "Get process instance diagram", description = "Retrieves process instance diagram and current task")
     @ApiResponses(value = {
@@ -117,6 +129,22 @@ public class ProcessController {
     })
     public ResponseEntity<List<Map<String, Object>>> getProcessFormFields(@PathVariable String id) {
         return ResponseEntity.ok(processService.getProcessFormFields(id));
+    }
+
+    // ★★★ 新增：取得特定節點的表單定義 ★★★
+    @GetMapping("/instances/{processInstanceId}/nodes/{nodeId}/form")
+    @Operation(summary = "Get node form fields", description = "Retrieves form fields for a specific node in a running process")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = List.class))),
+            @ApiResponse(responseCode = "404", description = "Instance or Node not found", content = @Content),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<List<Map<String, Object>>> getNodeFormFields(
+            @PathVariable String processInstanceId,
+            @PathVariable String nodeId
+    ) {
+        return ResponseEntity.ok(processService.getNodeFormFields(processInstanceId, nodeId));
     }
 
     @GetMapping("/users")
@@ -161,7 +189,7 @@ public class ProcessController {
     }
 
     @PostMapping("/instances/{processInstanceId}/jump")
-    @Operation(summary = "Jump to node", description = "Jumps the process instance to a specified node")
+    @Operation(summary = "Jump to node", description = "Jumps the process instance to a specified node with optional variables")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Node jumped successfully",
                     content = @Content(mediaType = "application/json")),
@@ -169,12 +197,14 @@ public class ProcessController {
             @ApiResponse(responseCode = "404", description = "Instance or node not found", content = @Content),
             @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
-    public ResponseEntity<Void> jumpToNode(@PathVariable String processInstanceId, @RequestBody Map<String, String> request) {
-        String targetNode = request.get("targetNode");
-        if (targetNode == null || targetNode.isEmpty()) {
+    public ResponseEntity<Void> jumpToNode(
+            @PathVariable String processInstanceId,
+            @RequestBody TaskJumpRequest request
+    ) {
+        if (request.getTargetNode() == null || request.getTargetNode().isEmpty()) {
             throw new IllegalArgumentException("目標節點不能為空");
         }
-        processService.jumpToNode(processInstanceId, targetNode);
+        processService.jumpToNode(processInstanceId, request.getTargetNode(), request.getVariables());
         return ResponseEntity.ok().build();
     }
 
@@ -207,7 +237,6 @@ public class ProcessController {
                 .body(resource);
     }
 
-    // ★★★ 新增：歷史紀錄查詢 API ★★★
     @GetMapping("/instances/{id}/history")
     @Operation(summary = "Get process history", description = "Retrieves execution history for a process instance")
     @ApiResponses(value = {

@@ -12,7 +12,8 @@ public class ActivitiConfig {
 
     @Bean
     public Deployment deployProcess(RepositoryService repositoryService) {
-         return repositoryService.createDeployment()
+        // 確保路徑正確，若無此檔案可先註解掉或確保檔案存在
+        return repositoryService.createDeployment()
                 .addClasspathResource("processes/todoProcess.bpmn20.xml")
                 .deploy();
     }
@@ -27,7 +28,7 @@ public class ActivitiConfig {
         config.setJdbcPassword("");
         config.setDatabaseSchemaUpdate("true"); // 自動更新 DB Schema
 
-        // ★★★ 關鍵：確保歷史層級被設定 (雖然 application.properties 有設，但手動 config 可能會覆蓋) ★★★
+        // ★★★ 關鍵：確保歷史層級被設定 ★★★
         config.setHistory("full");
 
         return config;
@@ -53,9 +54,14 @@ public class ActivitiConfig {
         return processEngine.getRepositoryService();
     }
 
-    // ★★★ 新增：註冊 HistoryService Bean ★★★
     @Bean
     public HistoryService historyService(ProcessEngine processEngine) {
         return processEngine.getHistoryService();
+    }
+
+    // ★★★ 新增：註冊 ManagementService Bean (解決 Parameter 6 error) ★★★
+    @Bean
+    public ManagementService managementService(ProcessEngine processEngine) {
+        return processEngine.getManagementService();
     }
 }

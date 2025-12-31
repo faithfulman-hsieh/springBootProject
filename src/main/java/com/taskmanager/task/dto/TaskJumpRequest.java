@@ -1,14 +1,27 @@
-// src/main/java/com/taskmanager/task/dto/TaskJumpRequest.java
 package com.taskmanager.task.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.Map;
 
-@Schema(description = "Request object for jumping to a specific task")
+// ★★★ 關鍵修正：忽略前端多傳的欄位 (如 processInstanceId)，避免 400 錯誤 ★★★
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TaskJumpRequest {
+    private String targetNode;
+    private Map<String, Object> variables;
 
-    @Schema(description = "ID of the target task", example = "ManagerTask", required = true)
-    private String targetTaskId;
+    public String getTargetNode() {
+        return targetNode;
+    }
 
-    public String getTargetTaskId() { return targetTaskId; }
-    public void setTargetTaskId(String targetTaskId) { this.targetTaskId = targetTaskId; }
+    public void setTargetNode(String targetNode) {
+        this.targetNode = targetNode;
+    }
+
+    public Map<String, Object> getVariables() {
+        return variables;
+    }
+
+    public void setVariables(Map<String, Object> variables) {
+        this.variables = variables;
+    }
 }
