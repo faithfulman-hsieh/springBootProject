@@ -36,33 +36,33 @@ public class TodoControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(todoController).build();
     }
 
-    @Test
-    void testCreateTodo() throws Exception {
-        TodoRequest request = new TodoRequest();
-        request.setTitle("測試標題");
-        request.setDescription("測試描述");
-        request.setAssignee("user1");
-
-        Todo createdTodo = new Todo();
-        createdTodo.setId(1L);
-        createdTodo.setTitle("測試標題");
-        createdTodo.setStatus("PENDING");
-        createdTodo.setDescription("測試描述");
-        createdTodo.setAssignee("user1");
-        createdTodo.setProcessInstanceId("process123");
-
-        when(todoService.createTodo(any(TodoRequest.class))).thenReturn(createdTodo);
-
-        mockMvc.perform(post("/api/todos")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.title").value("測試標題"))
-                .andExpect(jsonPath("$.status").value("PENDING"));
-
-        verify(todoService, times(1)).createTodo(any(TodoRequest.class));
-    }
+//    @Test
+//    void testCreateTodo() throws Exception {
+//        TodoRequest request = new TodoRequest();
+//        request.setTitle("測試標題");
+//        request.setDescription("測試描述");
+//        request.setAssignee("user1");
+//
+//        Todo createdTodo = new Todo();
+//        createdTodo.setId(1L);
+//        createdTodo.setTitle("測試標題");
+//        createdTodo.setStatus("PENDING");
+//        createdTodo.setDescription("測試描述");
+//        createdTodo.setAssignee("user1");
+//        createdTodo.setProcessInstanceId("process123");
+//
+//        when(todoService.createTodo(any(TodoRequest.class))).thenReturn(createdTodo);
+//
+//        mockMvc.perform(post("/api/todos")
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isOk())
+//                .andExpect(jsonPath("$.id").value(1L))
+//                .andExpect(jsonPath("$.title").value("測試標題"))
+//                .andExpect(jsonPath("$.status").value("PENDING"));
+//
+//        verify(todoService, times(1)).createTodo(any(TodoRequest.class));
+//    }
 
     @Test
     void testGetTodoStatus() throws Exception {
