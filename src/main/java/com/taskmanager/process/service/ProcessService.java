@@ -638,6 +638,10 @@ public class ProcessService {
             Map<String, Object> globalVars = historyVariables.stream()
                     .collect(Collectors.toMap(HistoricVariableInstance::getVariableName, HistoricVariableInstance::getValue, (v1, v2) -> v2));
 
+            // ★★★ 新增：查詢當前實際存在的任務，用於比對是否為「幽靈/跳過」任務 ★★★
+            List<Task> activeTasks = taskService.createTaskQuery().processInstanceId(processInstanceId).list();
+            List<String> activeTaskIds = activeTasks.stream().map(Task::getId).collect(Collectors.toList());
+
             List<HistoryLog> historyLogs = new ArrayList<>();
 
             for (HistoricActivityInstance activity : activities) {
@@ -658,16 +662,30 @@ public class ProcessService {
                 log.setActivityType(activity.getActivityType());
                 log.setAssignee(activity.getAssignee());
 
-                if (activity.getStartTime() != null) {
-                    log.setStartTime(LocalDateTime.ofInstant(activity.getStartTime().toInstant(), java.time.ZoneId.systemDefault()).format(FORMATTER));
-                }
-
                 if (activity.getEndTime() != null) {
                     log.setEndTime(LocalDateTime.ofInstant(activity.getEndTime().toInstant(), java.time.ZoneId.systemDefault()).format(FORMATTER));
-                    log.setStatus("Completed");
+
+                    // 如果有刪除原因 (如 Jump)，顯示為已跳過或已取消，否則顯示 Completed
+                    if (activity.getDeleteReason() != null) {
+                        log.setStatus("Skipped");
+                    } else {
+                        log.setStatus("Completed");
+                    }
                     log.setDuration(formatDuration(activity.getDurationInMillis()));
                 } else {
-                    log.setStatus("Running");
+                    // ★★★ 關鍵修正：endTime 為空時，檢查任務是否真的存在 ★★★
+                    if ("userTask".equals(activity.getActivityType())) {
+                        if (activeTaskIds.contains(activity.getTaskId())) {
+                            log.setStatus("Running");
+                        } else {
+                            // 任務不在活動列表中，代表已被跳過
+                            log.setStatus("Skipped");
+                            // 可選擇給一個當前時間作為結束時間，或是留空
+                            log.setEndTime(LocalDateTime.now().format(FORMATTER));
+                        }
+                    } else {
+                        log.setStatus("Running");
+                    }
                     log.setDuration("-");
                 }
 
