@@ -39,8 +39,12 @@ public class TaskManagerApplication {
 			if (roleRepository.count() == 0) {
 				Role userRole = new Role("ROLE_USER");
 				Role adminRole = new Role("ROLE_ADMIN");
+				// ★★★ 新增 IT 角色 ★★★
+				Role itRole = new Role("ROLE_IT");
+
 				roleRepository.save(userRole);
 				roleRepository.save(adminRole);
+				roleRepository.save(itRole);
 
 				// User 1: admin
 				User admin = new User("admin", "admin@example.com", passwordEncoder.encode("admin"));
@@ -52,12 +56,17 @@ public class TaskManagerApplication {
 				user.getRoles().add(userRole);
 				userRepository.save(user);
 
-				// User 3: manager (新增)
+				// User 3: manager
 				User manager = new User("manager", "manager@example.com", passwordEncoder.encode("manager"));
-				manager.getRoles().add(userRole); // 暫時給一般權限
+				manager.getRoles().add(userRole);
 				userRepository.save(manager);
 
-				System.out.println("初始化使用者(admin, user, manager)與角色完成");
+				// ★★★ 新增 IT User ★★★
+				User ituser = new User("ituser", "ituser@example.com", passwordEncoder.encode("ituser"));
+				ituser.getRoles().add(itRole); // 給予 IT 權限
+				userRepository.save(ituser);
+
+				System.out.println("✅ 初始化使用者(admin, user, manager, ituser)與角色完成");
 			}
 
 			// -------------------------------------------------
@@ -68,9 +77,10 @@ public class TaskManagerApplication {
 			deployProcessIfNeeded(repositoryService, processDefRepository, "leaveProcess", "請假流程", "processes/leaveProcess.bpmn20.xml");
 			deployProcessIfNeeded(repositoryService, processDefRepository, "purchaseProcess", "採購流程", "processes/purchaseProcess.bpmn20.xml");
 			deployProcessIfNeeded(repositoryService, processDefRepository, "todoProcess", "待辦事項流程", "processes/todoProcess.bpmn20.xml");
-
-			// ★★★ 部署會簽流程 ★★★
 			deployProcessIfNeeded(repositoryService, processDefRepository, "countersignProcess", "聯合會簽流程", "processes/countersignProcess.bpmn20.xml");
+
+			// ★★★ 部署 IT 報修流程 ★★★
+			deployProcessIfNeeded(repositoryService, processDefRepository, "itRepairProcess", "IT 報修流程", "processes/itRepairProcess.bpmn20.xml");
 
 			System.out.println("---------- Demo 流程部署檢查完成 ----------");
 		};
@@ -94,14 +104,14 @@ public class TaskManagerApplication {
 						.name(deploymentName)
 						.deploy();
 
-				System.out.println("自動部署成功: " + deploymentName + " (ID: " + deployment.getId() + ")");
+				System.out.println("✅ 自動部署成功: " + deploymentName + " (ID: " + deployment.getId() + ")");
 
 				targetDefinition = repositoryService.createProcessDefinitionQuery()
 						.deploymentId(deployment.getId())
 						.singleResult();
 			} else {
 				targetDefinition = list.get(0);
-				System.out.println("流程已存在: " + deploymentName);
+				System.out.println("ℹ️ 流程已存在: " + deploymentName);
 			}
 
 			if (targetDefinition != null) {
@@ -115,12 +125,12 @@ public class TaskManagerApplication {
 					processDef.setProcessDefinitionId(targetDefinition.getId());
 
 					processDefRepository.save(processDef);
-					System.out.println("   └── 已同步至 ProcessDef 資料表");
+					System.out.println("   └── ✅ 已同步至 ProcessDef 資料表");
 				}
 			}
 
 		} catch (Exception e) {
-			System.err.println("部署失敗 [" + deploymentName + "]: " + e.getMessage());
+			System.err.println("❌ 部署失敗 [" + deploymentName + "]: " + e.getMessage());
 		}
 	}
 }

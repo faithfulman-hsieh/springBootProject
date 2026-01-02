@@ -38,6 +38,34 @@ public class TaskController {
         return ResponseEntity.ok(taskManagerService.getMyTasks());
     }
 
+    // ★★★ 新增：取得群組可認領任務 ★★★
+    @GetMapping("/group-tasks")
+    @Operation(summary = "Get group tasks", description = "Retrieves unassigned tasks for candidate groups")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Success",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = TaskDto.class))),
+            @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
+    })
+    public ResponseEntity<List<TaskDto>> getGroupTasks() {
+        return ResponseEntity.ok(taskManagerService.getGroupTasks());
+    }
+
+    // ★★★ 新增：簽收任務 ★★★
+    @PostMapping("/{id}/claim")
+    @Operation(summary = "Claim a task", description = "Assign the task to the current user")
+    public ResponseEntity<Void> claimTask(@PathVariable String id) {
+        taskManagerService.claimTask(id);
+        return ResponseEntity.ok().build();
+    }
+
+    // ★★★ 新增：反簽收任務 ★★★
+    @PostMapping("/{id}/unclaim")
+    @Operation(summary = "Unclaim a task", description = "Release the task back to group")
+    public ResponseEntity<Void> unclaimTask(@PathVariable String id) {
+        taskManagerService.unclaimTask(id);
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/history-tasks")
     @Operation(summary = "Get user's history tasks", description = "Retrieves completed tasks assigned to the current user")
     @ApiResponses(value = {

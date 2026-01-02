@@ -10,15 +10,13 @@ import org.activiti.engine.history.HistoricTaskInstance;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority; // ★★★ 新增 Import ★★★
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*; // 確保有 import java.util.*
 import java.util.stream.Collectors;
 
 @Service
@@ -41,61 +39,92 @@ public class TaskManagerService {
         this.historyService = historyService;
     }
 
-    public List<TaskDto> getMyTasks() {
-        String assignee = "user";
+    private String getCurrentUserId() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
-                assignee = auth.getName();
+                return auth.getName();
             }
         } catch (Exception e) {
             // ignore
         }
+        return "user";
+    }
 
-        // 回歸單純的 Task 查詢，不撈變數
+    // ★★★ 新增：取得目前使用者的角色清單 (即 Activiti 的 Groups) ★★★
+    private List<String> getUserRoles() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                return auth.getAuthorities().stream()
+                        .map(GrantedAuthority::getAuthority)
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return Collections.emptyList();
+    }
+
+    public List<TaskDto> getMyTasks() {
+        String assignee = getCurrentUserId();
+
         List<Task> activitiTasks = taskService.createTaskQuery()
                 .taskAssignee(assignee)
                 .orderByTaskCreateTime().desc()
                 .list();
 
-        List<TaskDto> tasks = new ArrayList<>();
-        for (Task t : activitiTasks) {
-            String processName = "Unknown Process";
-            try {
-                processName = repositoryService.createProcessDefinitionQuery()
-                        .processDefinitionId(t.getProcessDefinitionId())
-                        .singleResult()
-                        .getName();
-            } catch (Exception e) {
-                // ignore
-            }
+        return convertTasks(activitiTasks, null);
+    }
 
-            TaskDto taskDto = new TaskDto(
-                    t.getId(),
-                    t.getName(),
-                    processName,
-                    t.getAssignee(),
-                    t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
-                    t.getProcessInstanceId(),
-                    null
-            );
-            tasks.add(taskDto);
+    // ★★★ 修改：手動處理 User 和 Group 的聯集查詢 ★★★
+    public List<TaskDto> getGroupTasks() {
+        String userId = getCurrentUserId();
+        List<String> groups = getUserRoles();
+
+        // 使用 Set 來避免重複 (雖然 Activiti 任務 ID 是唯一的，但分開查詢可能會重疊)
+        Map<String, Task> taskMap = new HashMap<>();
+
+        // 1. 查詢「我是候選人」的任務 (Direct Candidate User)
+        List<Task> userTasks = taskService.createTaskQuery()
+                .taskCandidateUser(userId)
+                .taskUnassigned()
+                .list();
+        for (Task t : userTasks) {
+            taskMap.put(t.getId(), t);
         }
-        return tasks;
+
+        // 2. 查詢「我的群組是候選群組」的任務 (Candidate Group)
+        // 這是解決 "No UserGroupManager" 警告的關鍵：我們明確告訴引擎要查哪些群組
+        if (!groups.isEmpty()) {
+            List<Task> groupTasks = taskService.createTaskQuery()
+                    .taskCandidateGroupIn(groups)
+                    .taskUnassigned()
+                    .list();
+            for (Task t : groupTasks) {
+                taskMap.put(t.getId(), t);
+            }
+        }
+
+        // 3. 轉為 List 並排序
+        List<Task> finalTasks = new ArrayList<>(taskMap.values());
+        finalTasks.sort((t1, t2) -> t2.getCreateTime().compareTo(t1.getCreateTime())); // 降序
+
+        return convertTasks(finalTasks, "待認領");
+    }
+
+    public void claimTask(String taskId) {
+        String userId = getCurrentUserId();
+        taskService.claim(taskId, userId);
+    }
+
+    public void unclaimTask(String taskId) {
+        taskService.unclaim(taskId);
     }
 
     public List<TaskDto> getHistoryTasks() {
-        String assignee = "user";
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName())) {
-                assignee = auth.getName();
-            }
-        } catch (Exception e) {
-            // ignore
-        }
+        String assignee = getCurrentUserId();
 
-        // 回歸單純的歷史查詢
         List<HistoricTaskInstance> historicTasks = historyService.createHistoricTaskInstanceQuery()
                 .taskAssignee(assignee)
                 .finished()
@@ -104,17 +133,9 @@ public class TaskManagerService {
 
         List<TaskDto> tasks = new ArrayList<>();
         for (HistoricTaskInstance ht : historicTasks) {
-            String processName = "Unknown Process";
-            try {
-                processName = repositoryService.createProcessDefinitionQuery()
-                        .processDefinitionId(ht.getProcessDefinitionId())
-                        .singleResult()
-                        .getName();
-            } catch (Exception e) {
-                // ignore
-            }
-
+            String processName = getProcessName(ht.getProcessDefinitionId());
             String currentAssignee = "流程已結束";
+
             ProcessInstance pi = runtimeService.createProcessInstanceQuery()
                     .processInstanceId(ht.getProcessInstanceId())
                     .singleResult();
@@ -132,7 +153,7 @@ public class TaskManagerService {
                 }
             }
 
-            TaskDto taskDto = new TaskDto(
+            tasks.add(new TaskDto(
                     ht.getId(),
                     ht.getName(),
                     processName,
@@ -140,8 +161,7 @@ public class TaskManagerService {
                     ht.getEndTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
                     ht.getProcessInstanceId(),
                     currentAssignee
-            );
-            tasks.add(taskDto);
+            ));
         }
         return tasks;
     }
@@ -159,7 +179,6 @@ public class TaskManagerService {
             return new ArrayList<>();
         }
 
-        // ★★★ 關鍵：取得變數，這是對話框能顯示資料的來源 ★★★
         Map<String, Object> variables = taskService.getVariables(taskId);
 
         UserTask userTask = (UserTask) flowElement;
@@ -173,11 +192,8 @@ public class TaskManagerService {
             String type = prop.getType() != null ? prop.getType() : "string";
             field.put("type", mapFormPropertyType(type));
             field.put("required", prop.isRequired());
-
-            // 是否唯讀
             field.put("disabled", !prop.isWriteable());
 
-            // ★★★ 關鍵：如果有對應的變數值，填入 value 屬性 ★★★
             if (variables.containsKey(prop.getId())) {
                 field.put("value", variables.get(prop.getId()));
             }
@@ -215,6 +231,35 @@ public class TaskManagerService {
             throw new IllegalArgumentException("任務不存在：" + taskId);
         }
         taskService.setAssignee(taskId, assignee);
+    }
+
+    private List<TaskDto> convertTasks(List<Task> tasks, String defaultAssignee) {
+        List<TaskDto> result = new ArrayList<>();
+        for (Task t : tasks) {
+            String processName = getProcessName(t.getProcessDefinitionId());
+            String assignee = t.getAssignee() != null ? t.getAssignee() : defaultAssignee;
+            result.add(new TaskDto(
+                    t.getId(),
+                    t.getName(),
+                    processName,
+                    assignee,
+                    t.getCreateTime().toInstant().atZone(ZoneId.systemDefault()).format(DATE_FORMATTER),
+                    t.getProcessInstanceId(),
+                    null
+            ));
+        }
+        return result;
+    }
+
+    private String getProcessName(String processDefinitionId) {
+        try {
+            return repositoryService.createProcessDefinitionQuery()
+                    .processDefinitionId(processDefinitionId)
+                    .singleResult()
+                    .getName();
+        } catch (Exception e) {
+            return "Unknown Process";
+        }
     }
 
     private String mapFormPropertyType(String activitiType) {

@@ -5,7 +5,7 @@ import com.taskmanager.process.model.ProcessDef;
 import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.repository.ProcessDefRepository;
 import com.taskmanager.process.repository.ProcessInsRepository;
-import com.taskmanager.task.dto.TaskFormRequest; // 補回 import (上次可能漏了)
+import com.taskmanager.task.dto.TaskFormRequest; // 確保 import 存在
 import org.activiti.bpmn.model.BpmnModel;
 import org.activiti.bpmn.model.FormProperty;
 import org.activiti.bpmn.model.FormValue;
@@ -31,7 +31,7 @@ import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.security.core.context.SecurityContextHolder; // ★★★ 新增 Import ★★★
+import org.springframework.security.core.context.SecurityContextHolder; // 確保 import 存在
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -147,14 +147,22 @@ public class ProcessService {
 
     public ProcessIns startProcess(String processDefinitionId, Map<String, Object> variables) {
         try {
-            // ★★★ 修正：動態獲取當前登入的使用者 ID ★★★
-            String currentUserId = SecurityContextHolder.getContext().getAuthentication().getName();
+            // 改用 SecurityContextHolder 取得當前使用者
+            String currentUserId = "user";
+            try {
+                if (SecurityContextHolder.getContext().getAuthentication() != null) {
+                    currentUserId = SecurityContextHolder.getContext().getAuthentication().getName();
+                }
+            } catch (Exception e) {
+                // ignore
+            }
 
             if (variables == null) {
                 variables = new HashMap<>();
             }
+            // 這裡不需要額外處理 assigneeList，因為前端如果是 checkbox-group，
+            // 傳過來的已經是 List<String>，Activiti 可以直接處理 Collection 變數。
 
-            // 預設 Demo 變數 (可保留或移除)
             variables.putIfAbsent("managerAssignee", "admin");
             variables.putIfAbsent("financeAssignee", "admin");
             variables.putIfAbsent("itemName", "POC測試項目");
@@ -164,23 +172,13 @@ public class ProcessService {
                 variables.put("nextAssignee", "admin");
             }
 
-            // 設定 Activiti 的認證使用者，這樣 historyService 才能記錄 startedBy
             org.activiti.engine.impl.identity.Authentication.setAuthenticatedUserId(currentUserId);
-
             ProcessInstance instance = runtimeService.startProcessInstanceById(processDefinitionId, variables);
-
-            // 清除，避免影響執行緒池中的其他請求
             org.activiti.engine.impl.identity.Authentication.setAuthenticatedUserId(null);
 
-            List<Task> tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
+            // ★★★ 修正點：移除了原本自動 setAssignee 的迴圈，讓任務可以停留在 Group 狀態 ★★★
 
-            // 如果第一個任務沒有 Assignee，暫時指派給發起人 (視業務需求而定，這裡保留原邏輯但用動態 ID)
-            for (Task t : tasks) {
-                if (t.getAssignee() == null) {
-                    taskService.setAssignee(t.getId(), currentUserId);
-                }
-            }
-            tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
+            List<Task> tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
 
             ProcessIns processIns = new ProcessIns();
             processIns.setId(instance.getId());
@@ -189,14 +187,12 @@ public class ProcessService {
             processIns.setProcessDefinitionId(processDefinitionId);
             processIns.setStartTime(LocalDateTime.now().format(FORMATTER));
 
-            // ★★★ 建議：將發起人存入我們自己的表，方便後續查詢 (如果 ProcessIns 有這個欄位的話) ★★★
-            // processIns.setStartUserId(currentUserId);
-
             if (tasks.isEmpty()) {
                 processIns.setCurrentTask("Completed");
                 processIns.setAssignee(null);
             } else {
                 String taskNames = tasks.stream().map(Task::getName).collect(Collectors.joining(", "));
+                // 若 assignee 為空，顯示待認領
                 String assignees = tasks.stream().map(t -> t.getAssignee() == null ? "待認領" : t.getAssignee()).collect(Collectors.joining(", "));
                 processIns.setCurrentTask(taskNames);
                 processIns.setAssignee(assignees);
@@ -253,10 +249,16 @@ public class ProcessService {
 
     public List<ProcessIns> getMyProcessInstances() {
         try {
-            // ★★★ 修正：動態獲取當前登入的使用者 ID ★★★
-            String currentUserId = SecurityContextHolder.getContext().getAuthentication().getName();
+            // 改用 SecurityContextHolder 取得當前使用者
+            String currentUserId = "user";
+            try {
+                if (SecurityContextHolder.getContext().getAuthentication() != null) {
+                    currentUserId = SecurityContextHolder.getContext().getAuthentication().getName();
+                }
+            } catch (Exception e) {
+                // ignore
+            }
 
-            // 使用 startedBy(currentUserId) 查詢該使用者發起的流程
             List<HistoricProcessInstance> historicInstances = historyService.createHistoricProcessInstanceQuery()
                     .startedBy(currentUserId)
                     .orderByProcessInstanceStartTime().desc()
@@ -368,10 +370,8 @@ public class ProcessService {
         }
     }
 
-    // ★★★ 核心功能：獲取指定節點的表單欄位 (用於跳關時預填) ★★★
     public List<Map<String, Object>> getNodeFormFields(String processInstanceId, String nodeId) {
         try {
-            // 1. 取得流程實例
             ProcessInstance instance = runtimeService.createProcessInstanceQuery()
                     .processInstanceId(processInstanceId)
                     .singleResult();
@@ -380,14 +380,11 @@ public class ProcessService {
                 throw new IllegalArgumentException("流程實例不存在或已結束");
             }
 
-            // 2. 讀取 BPMN 模型
             BpmnModel bpmnModel = repositoryService.getBpmnModel(instance.getProcessDefinitionId());
             org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
 
-            // 3. 找到目標節點
             org.activiti.bpmn.model.FlowElement flowElement = process.getFlowElement(nodeId);
 
-            // 4. 解析表單屬性 (只針對 UserTask)
             if (flowElement instanceof UserTask) {
                 UserTask userTask = (UserTask) flowElement;
                 return convertFormProperties(userTask.getFormProperties(), Collections.emptySet());
