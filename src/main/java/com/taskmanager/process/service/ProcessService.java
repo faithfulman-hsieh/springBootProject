@@ -5,6 +5,7 @@ import com.taskmanager.process.model.ProcessDef;
 import com.taskmanager.process.model.ProcessIns;
 import com.taskmanager.process.repository.ProcessDefRepository;
 import com.taskmanager.process.repository.ProcessInsRepository;
+import com.taskmanager.task.dto.TaskFormRequest; // 補回 import (上次可能漏了)
 import org.activiti.bpmn.model.BpmnModel;
 import org.activiti.bpmn.model.FormProperty;
 import org.activiti.bpmn.model.FormValue;
@@ -25,10 +26,12 @@ import org.activiti.engine.impl.persistence.entity.ExecutionEntity;
 import org.activiti.engine.impl.persistence.entity.TaskEntity;
 import org.activiti.engine.impl.util.ProcessDefinitionUtil;
 import org.activiti.engine.repository.Deployment;
+import org.activiti.engine.repository.ProcessDefinition;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
+import org.springframework.security.core.context.SecurityContextHolder; // ★★★ 新增 Import ★★★
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -39,10 +42,13 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -141,11 +147,14 @@ public class ProcessService {
 
     public ProcessIns startProcess(String processDefinitionId, Map<String, Object> variables) {
         try {
-            String currentUserId = "user";
+            // ★★★ 修正：動態獲取當前登入的使用者 ID ★★★
+            String currentUserId = SecurityContextHolder.getContext().getAuthentication().getName();
 
             if (variables == null) {
                 variables = new HashMap<>();
             }
+
+            // 預設 Demo 變數 (可保留或移除)
             variables.putIfAbsent("managerAssignee", "admin");
             variables.putIfAbsent("financeAssignee", "admin");
             variables.putIfAbsent("itemName", "POC測試項目");
@@ -155,12 +164,17 @@ public class ProcessService {
                 variables.put("nextAssignee", "admin");
             }
 
+            // 設定 Activiti 的認證使用者，這樣 historyService 才能記錄 startedBy
             org.activiti.engine.impl.identity.Authentication.setAuthenticatedUserId(currentUserId);
+
             ProcessInstance instance = runtimeService.startProcessInstanceById(processDefinitionId, variables);
+
+            // 清除，避免影響執行緒池中的其他請求
             org.activiti.engine.impl.identity.Authentication.setAuthenticatedUserId(null);
 
             List<Task> tasks = taskService.createTaskQuery().processInstanceId(instance.getId()).list();
 
+            // 如果第一個任務沒有 Assignee，暫時指派給發起人 (視業務需求而定，這裡保留原邏輯但用動態 ID)
             for (Task t : tasks) {
                 if (t.getAssignee() == null) {
                     taskService.setAssignee(t.getId(), currentUserId);
@@ -174,6 +188,9 @@ public class ProcessService {
             processIns.setStatus("running");
             processIns.setProcessDefinitionId(processDefinitionId);
             processIns.setStartTime(LocalDateTime.now().format(FORMATTER));
+
+            // ★★★ 建議：將發起人存入我們自己的表，方便後續查詢 (如果 ProcessIns 有這個欄位的話) ★★★
+            // processIns.setStartUserId(currentUserId);
 
             if (tasks.isEmpty()) {
                 processIns.setCurrentTask("Completed");
@@ -236,8 +253,10 @@ public class ProcessService {
 
     public List<ProcessIns> getMyProcessInstances() {
         try {
-            String currentUserId = "user";
+            // ★★★ 修正：動態獲取當前登入的使用者 ID ★★★
+            String currentUserId = SecurityContextHolder.getContext().getAuthentication().getName();
 
+            // 使用 startedBy(currentUserId) 查詢該使用者發起的流程
             List<HistoricProcessInstance> historicInstances = historyService.createHistoricProcessInstanceQuery()
                     .startedBy(currentUserId)
                     .orderByProcessInstanceStartTime().desc()
@@ -358,7 +377,6 @@ public class ProcessService {
                     .singleResult();
 
             if (instance == null) {
-                // 如果是歷史實例，或許可以考慮讓它跳轉（通常不行，但為了防呆）
                 throw new IllegalArgumentException("流程實例不存在或已結束");
             }
 
@@ -372,10 +390,9 @@ public class ProcessService {
             // 4. 解析表單屬性 (只針對 UserTask)
             if (flowElement instanceof UserTask) {
                 UserTask userTask = (UserTask) flowElement;
-                return convertFormProperties(userTask.getFormProperties());
+                return convertFormProperties(userTask.getFormProperties(), Collections.emptySet());
             }
 
-            // 非 UserTask (如 ServiceTask) 通常沒有表單
             return new ArrayList<>();
 
         } catch (Exception e) {
@@ -404,13 +421,23 @@ public class ProcessService {
             BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
             org.activiti.bpmn.model.Process process = bpmnModel.getProcesses().get(0);
 
+            Set<String> multiInstanceCollections = new HashSet<>();
+            process.getFlowElements().stream()
+                    .filter(e -> e instanceof UserTask)
+                    .map(e -> (UserTask) e)
+                    .forEach(task -> {
+                        if (task.getLoopCharacteristics() != null && task.getLoopCharacteristics().getInputDataItem() != null) {
+                            multiInstanceCollections.add(task.getLoopCharacteristics().getInputDataItem());
+                        }
+                    });
+
             StartEvent startEvent = (StartEvent) process.getFlowElements().stream()
                     .filter(element -> element instanceof StartEvent)
                     .findFirst()
                     .orElse(null);
 
             if (startEvent != null) {
-                return convertFormProperties(startEvent.getFormProperties());
+                return convertFormProperties(startEvent.getFormProperties(), multiInstanceCollections);
             }
             return new ArrayList<>();
         } catch (Exception e) {
@@ -418,7 +445,7 @@ public class ProcessService {
         }
     }
 
-    private List<Map<String, Object>> convertFormProperties(List<FormProperty> formProperties) {
+    private List<Map<String, Object>> convertFormProperties(List<FormProperty> formProperties, Set<String> multiInstanceCollections) {
         List<Map<String, Object>> formFields = new ArrayList<>();
 
         for (FormProperty prop : formProperties) {
@@ -427,7 +454,12 @@ public class ProcessService {
             field.put("label", prop.getName() != null ? prop.getName() : prop.getId());
 
             String type = prop.getType() != null ? prop.getType() : "string";
-            field.put("type", mapFormPropertyType(type));
+
+            if ("enum".equals(type) && multiInstanceCollections.contains(prop.getId())) {
+                type = "checkbox-group";
+            }
+
+            field.put("type", "checkbox-group".equals(type) ? "checkbox-group" : mapFormPropertyType(type));
 
             field.put("required", prop.isRequired());
             field.put("disabled", !prop.isWriteable());
@@ -436,7 +468,7 @@ public class ProcessService {
                 field.put("value", prop.getDefaultExpression());
             }
 
-            if ("enum".equals(type)) {
+            if ("enum".equals(prop.getType()) || "checkbox-group".equals(type)) {
                 List<Map<String, String>> options = new ArrayList<>();
                 for (FormValue val : prop.getFormValues()) {
                     Map<String, String> option = new HashMap<>();
@@ -519,7 +551,6 @@ public class ProcessService {
         }
     }
 
-    // ★★★ 核心功能：帶參數的防禦性跳關 ★★★
     public void jumpToNode(String processInstanceId, String targetNodeId, Map<String, Object> variables) {
         try {
             if (variables != null && !variables.isEmpty()) {
@@ -551,7 +582,6 @@ public class ProcessService {
         }
     }
 
-    // ★★★ 內部類別：防禦性跳關指令 ★★★
     private static class JumpCmd implements Command<Void> {
         private final String processInstanceId;
         private final String targetNodeId;
@@ -638,7 +668,6 @@ public class ProcessService {
             Map<String, Object> globalVars = historyVariables.stream()
                     .collect(Collectors.toMap(HistoricVariableInstance::getVariableName, HistoricVariableInstance::getValue, (v1, v2) -> v2));
 
-            // ★★★ 新增：查詢當前實際存在的任務，用於比對是否為「幽靈/跳過」任務 ★★★
             List<Task> activeTasks = taskService.createTaskQuery().processInstanceId(processInstanceId).list();
             List<String> activeTaskIds = activeTasks.stream().map(Task::getId).collect(Collectors.toList());
 
@@ -665,7 +694,6 @@ public class ProcessService {
                 if (activity.getEndTime() != null) {
                     log.setEndTime(LocalDateTime.ofInstant(activity.getEndTime().toInstant(), java.time.ZoneId.systemDefault()).format(FORMATTER));
 
-                    // 如果有刪除原因 (如 Jump)，顯示為已跳過或已取消，否則顯示 Completed
                     if (activity.getDeleteReason() != null) {
                         log.setStatus("Skipped");
                     } else {
@@ -673,14 +701,11 @@ public class ProcessService {
                     }
                     log.setDuration(formatDuration(activity.getDurationInMillis()));
                 } else {
-                    // ★★★ 關鍵修正：endTime 為空時，檢查任務是否真的存在 ★★★
                     if ("userTask".equals(activity.getActivityType())) {
                         if (activeTaskIds.contains(activity.getTaskId())) {
                             log.setStatus("Running");
                         } else {
-                            // 任務不在活動列表中，代表已被跳過
                             log.setStatus("Skipped");
-                            // 可選擇給一個當前時間作為結束時間，或是留空
                             log.setEndTime(LocalDateTime.now().format(FORMATTER));
                         }
                     } else {

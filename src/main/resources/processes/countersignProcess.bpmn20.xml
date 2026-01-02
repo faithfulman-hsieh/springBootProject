@@ -9,60 +9,121 @@
              expressionLanguage="http://www.w3.org/1999/XPath"
              targetNamespace="http://www.activiti.org/processdef">
 
-    <process id="countersignProcess" name="聯合會簽流程" isExecutable="true">
+    <process id="countersignProcess" name="聯合會簽流程(多數決)" isExecutable="true">
 
         <startEvent id="startEvent" name="開始">
             <extensionElements>
-                <activiti:formProperty id="assigneeList" name="會簽委員 (多選)" type="enum" required="true">
+                <activiti:formProperty id="assigneeList" name="會簽委員" type="enum" required="true">
                     <activiti:value id="admin" name="管理員 (admin)"/>
                     <activiti:value id="user" name="一般用戶 (user)"/>
                     <activiti:value id="manager" name="經理 (manager)"/>
                 </activiti:formProperty>
-
                 <activiti:formProperty id="reason" name="會簽事由" type="string" required="true"/>
+
+                <activiti:executionListener event="start" expression="${execution.setVariable('approveCount', 0)}"/>
             </extensionElements>
         </startEvent>
 
         <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="countersignTask"></sequenceFlow>
 
         <userTask id="countersignTask" name="委員聯合審批" activiti:assignee="${assignee}">
+            <extensionElements>
+                <activiti:formProperty id="auditResult" name="審核結果" type="enum" required="true">
+                    <activiti:value id="pass" name="同意"/>
+                    <activiti:value id="reject" name="不同意"/>
+                </activiti:formProperty>
+                <activiti:formProperty id="comment" name="審核意見" type="string" required="true"/>
+
+                <activiti:taskListener event="complete" expression="${execution.setVariable('approveCount', approveCount + (auditResult == 'pass' ? 1 : 0))}"/>
+            </extensionElements>
+
             <multiInstanceLoopCharacteristics isSequential="false"
                                               activiti:collection="assigneeList"
                                               activiti:elementVariable="assignee">
             </multiInstanceLoopCharacteristics>
         </userTask>
 
-        <sequenceFlow id="flow2" sourceRef="countersignTask" targetRef="endEvent"></sequenceFlow>
+        <sequenceFlow id="flow2" sourceRef="countersignTask" targetRef="decisionGateway"></sequenceFlow>
 
-        <endEvent id="endEvent" name="會簽結束"></endEvent>
+        <exclusiveGateway id="decisionGateway" name="統計結果" />
+
+        <sequenceFlow id="flowPass" name="通過 (過半數)" sourceRef="decisionGateway" targetRef="endEventPass">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approveCount > assigneeList.size() / 2}]]></conditionExpression>
+        </sequenceFlow>
+
+        <sequenceFlow id="flowFail" name="駁回 (未過半)" sourceRef="decisionGateway" targetRef="endEventFail">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approveCount <= assigneeList.size() / 2}]]></conditionExpression>
+        </sequenceFlow>
+
+        <endEvent id="endEventPass" name="會簽通過"></endEvent>
+        <endEvent id="endEventFail" name="會簽駁回"></endEvent>
 
     </process>
 
     <bpmndi:BPMNDiagram id="BPMNDiagram_Countersign">
         <bpmndi:BPMNPlane id="BPMNPlane_Countersign" bpmnElement="countersignProcess">
+
             <bpmndi:BPMNShape id="BPMNShape_startEvent" bpmnElement="startEvent">
                 <dc:Bounds x="150" y="200" width="36" height="36" />
                 <bpmndi:BPMNLabel>
                     <dc:Bounds x="158" y="240" width="22" height="14" />
                 </bpmndi:BPMNLabel>
             </bpmndi:BPMNShape>
+
             <bpmndi:BPMNShape id="BPMNShape_countersignTask" bpmnElement="countersignTask">
                 <dc:Bounds x="260" y="178" width="100" height="80" />
             </bpmndi:BPMNShape>
-            <bpmndi:BPMNShape id="BPMNShape_endEvent" bpmnElement="endEvent">
-                <dc:Bounds x="430" y="200" width="36" height="36" />
+
+            <bpmndi:BPMNShape id="BPMNShape_decisionGateway" bpmnElement="decisionGateway">
+                <dc:Bounds x="430" y="193" width="50" height="50" />
                 <bpmndi:BPMNLabel>
-                    <dc:Bounds x="426" y="240" width="44" height="14" />
+                    <dc:Bounds x="434" y="250" width="44" height="14" />
                 </bpmndi:BPMNLabel>
             </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="BPMNShape_endEventPass" bpmnElement="endEventPass">
+                <dc:Bounds x="580" y="120" width="36" height="36" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="576" y="160" width="44" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape id="BPMNShape_endEventFail" bpmnElement="endEventFail">
+                <dc:Bounds x="580" y="280" width="36" height="36" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="576" y="320" width="44" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
             <bpmndi:BPMNEdge id="BPMNEdge_flow1" bpmnElement="flow1">
                 <di:waypoint x="186" y="218" />
                 <di:waypoint x="260" y="218" />
             </bpmndi:BPMNEdge>
+
             <bpmndi:BPMNEdge id="BPMNEdge_flow2" bpmnElement="flow2">
                 <di:waypoint x="360" y="218" />
                 <di:waypoint x="430" y="218" />
             </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="BPMNEdge_flowPass" bpmnElement="flowPass">
+                <di:waypoint x="455" y="193" />
+                <di:waypoint x="455" y="138" />
+                <di:waypoint x="580" y="138" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="460" y="120" width="66" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+
+            <bpmndi:BPMNEdge id="BPMNEdge_flowFail" bpmnElement="flowFail">
+                <di:waypoint x="455" y="243" />
+                <di:waypoint x="455" y="298" />
+                <di:waypoint x="580" y="298" />
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds x="460" y="300" width="66" height="14" />
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+
         </bpmndi:BPMNPlane>
     </bpmndi:BPMNDiagram>
+
 </definitions>
