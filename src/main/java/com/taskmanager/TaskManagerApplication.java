@@ -4,8 +4,8 @@ import com.taskmanager.account.model.Role;
 import com.taskmanager.account.model.User;
 import com.taskmanager.account.adapter.out.repository.RoleRepository;
 import com.taskmanager.account.adapter.out.repository.UserRepository;
-import com.taskmanager.process.model.ProcessDef; // 引入 ProcessDef
-import com.taskmanager.process.repository.ProcessDefRepository; // 引入 ProcessDefRepository
+import com.taskmanager.process.model.ProcessDef;
+import com.taskmanager.process.repository.ProcessDefRepository;
 import org.activiti.engine.RepositoryService;
 import org.activiti.engine.repository.Deployment;
 import org.activiti.engine.repository.ProcessDefinition;
@@ -31,7 +31,7 @@ public class TaskManagerApplication {
 								 RoleRepository roleRepository,
 								 PasswordEncoder passwordEncoder,
 								 RepositoryService repositoryService,
-								 ProcessDefRepository processDefRepository) { // ★★★ 1. 注入 ProcessDefRepository ★★★
+								 ProcessDefRepository processDefRepository) {
 		return args -> {
 			// -------------------------------------------------
 			// 1. 初始化使用者與權限資料
@@ -42,15 +42,22 @@ public class TaskManagerApplication {
 				roleRepository.save(userRole);
 				roleRepository.save(adminRole);
 
-				User user = new User("user", "user@example.com", passwordEncoder.encode("user"));
-				user.getRoles().add(userRole);
-				userRepository.save(user);
-
+				// User 1: admin
 				User admin = new User("admin", "admin@example.com", passwordEncoder.encode("admin"));
 				admin.getRoles().add(adminRole);
 				userRepository.save(admin);
 
-				System.out.println("初始化使用者與角色完成");
+				// User 2: user
+				User user = new User("user", "user@example.com", passwordEncoder.encode("user"));
+				user.getRoles().add(userRole);
+				userRepository.save(user);
+
+				// User 3: manager (新增)
+				User manager = new User("manager", "manager@example.com", passwordEncoder.encode("manager"));
+				manager.getRoles().add(userRole); // 暫時給一般權限
+				userRepository.save(manager);
+
+				System.out.println("初始化使用者(admin, user, manager)與角色完成");
 			}
 
 			// -------------------------------------------------
@@ -58,23 +65,23 @@ public class TaskManagerApplication {
 			// -------------------------------------------------
 			System.out.println("---------- 開始自動部署 Demo 流程 ----------");
 
-			// 傳入 processDefRepository 以便同步資料
 			deployProcessIfNeeded(repositoryService, processDefRepository, "leaveProcess", "請假流程", "processes/leaveProcess.bpmn20.xml");
 			deployProcessIfNeeded(repositoryService, processDefRepository, "purchaseProcess", "採購流程", "processes/purchaseProcess.bpmn20.xml");
 			deployProcessIfNeeded(repositoryService, processDefRepository, "todoProcess", "待辦事項流程", "processes/todoProcess.bpmn20.xml");
+
+			// ★★★ 部署會簽流程 ★★★
+			deployProcessIfNeeded(repositoryService, processDefRepository, "countersignProcess", "聯合會簽流程", "processes/countersignProcess.bpmn20.xml");
 
 			System.out.println("---------- Demo 流程部署檢查完成 ----------");
 		};
 	}
 
-	// ★★★ 輔助方法：部署並同步至 ProcessDef 資料表 ★★★
 	private void deployProcessIfNeeded(RepositoryService repositoryService,
 									   ProcessDefRepository processDefRepository,
 									   String processKey,
 									   String deploymentName,
 									   String resourcePath) {
 		try {
-			// 1. 檢查 Activiti 引擎中是否已有此 Key 的流程
 			List<ProcessDefinition> list = repositoryService.createProcessDefinitionQuery()
 					.processDefinitionKey(processKey)
 					.list();
@@ -82,7 +89,6 @@ public class TaskManagerApplication {
 			ProcessDefinition targetDefinition = null;
 
 			if (list.isEmpty()) {
-				// 若無，則進行部署
 				Deployment deployment = repositoryService.createDeployment()
 						.addClasspathResource(resourcePath)
 						.name(deploymentName)
@@ -90,36 +96,31 @@ public class TaskManagerApplication {
 
 				System.out.println("自動部署成功: " + deploymentName + " (ID: " + deployment.getId() + ")");
 
-				// 部署後，重新查詢取得該 ProcessDefinition 物件 (為了拿 ID 和 Version)
 				targetDefinition = repositoryService.createProcessDefinitionQuery()
 						.deploymentId(deployment.getId())
 						.singleResult();
 			} else {
-				// 若已有，取最新版 (為了檢查是否需要補寫入 ProcessDef 表)
 				targetDefinition = list.get(0);
-				System.out.println("ℹ流程已存在引擎中: " + deploymentName);
+				System.out.println("流程已存在: " + deploymentName);
 			}
 
-			// 2. ★★★ 關鍵修正：同步寫入 ProcessDef 資料表 (前端才看得到) ★★★
 			if (targetDefinition != null) {
-				// 檢查 ProcessDef 表是否已有此 ID
 				if (!processDefRepository.existsById(targetDefinition.getId())) {
 					ProcessDef processDef = new ProcessDef();
 					processDef.setId(targetDefinition.getId());
-					processDef.setName(deploymentName); // 使用我們指定的名稱，或用 targetDefinition.getName()
+					processDef.setName(deploymentName);
 					processDef.setVersion(targetDefinition.getVersion() + ".0");
 					processDef.setStatus("active");
 					processDef.setDeploymentTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
 					processDef.setProcessDefinitionId(targetDefinition.getId());
 
 					processDefRepository.save(processDef);
-					System.out.println("   └── 已同步至 ProcessDef 資料表 (前端可見)");
+					System.out.println("   └── 已同步至 ProcessDef 資料表");
 				}
 			}
 
 		} catch (Exception e) {
-			// 捕捉例如檔案找不到的例外，只印出錯誤但不中斷程式
-			System.err.println("部署或同步失敗 [" + deploymentName + "]: " + e.getMessage());
+			System.err.println("部署失敗 [" + deploymentName + "]: " + e.getMessage());
 		}
 	}
 }
