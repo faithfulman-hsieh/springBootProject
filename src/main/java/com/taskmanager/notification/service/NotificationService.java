@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class NotificationService {
@@ -14,19 +17,26 @@ public class NotificationService {
     private final SimpMessagingTemplate messagingTemplate;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    // ★★★ 新增：暫存聊天記錄 (重啟後會消失，若需持久化可改用 DB) ★★★
+    private final List<ChatMessage> history = new CopyOnWriteArrayList<>();
+
     @Autowired
     public NotificationService(SimpMessagingTemplate messagingTemplate) {
         this.messagingTemplate = messagingTemplate;
     }
 
-    // 1. 發送廣播訊息 (聊天室用)
     public void sendGlobalMessage(ChatMessage message) {
         message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
+
+        // 儲存到歷史紀錄 (限制最近 50 筆以免佔用過多記憶體)
+        if (history.size() >= 50) {
+            history.remove(0);
+        }
+        history.add(message);
+
         messagingTemplate.convertAndSend("/topic/public-chat", message);
     }
 
-    // 2. 發送個人通知 (工作流整合用)
-    // 當任務指派給某人時，呼叫此方法
     public void sendNotificationToUser(String username, String content) {
         ChatMessage message = new ChatMessage();
         message.setSender("System");
@@ -34,7 +44,11 @@ public class NotificationService {
         message.setType("NOTIFICATION");
         message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
 
-        // 訊息會發送到: /user/{username}/queue/notifications
         messagingTemplate.convertAndSendToUser(username, "/queue/notifications", message);
+    }
+
+    // ★★★ 新增：取得歷史紀錄 ★★★
+    public List<ChatMessage> getPublicHistory() {
+        return new ArrayList<>(history);
     }
 }
