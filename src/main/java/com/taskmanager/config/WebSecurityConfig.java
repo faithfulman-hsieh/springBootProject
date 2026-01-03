@@ -50,7 +50,8 @@ public class WebSecurityConfig {
                         // /api/login: 登入接口必須公開
                         // /error: 錯誤轉發路徑必須公開
                         // /keep-alive: 健康檢查
-                        .requestMatchers("/api/login", "/api/auth/**", "/keep-alive", "/error").permitAll()
+                        // ★★★ 新增：/ws/** WebSocket 端點開放 ★★★
+                        .requestMatchers("/api/login", "/api/auth/**", "/keep-alive", "/error", "/ws/**").permitAll()
 
                         // ★★★ 2. Swagger 文件 (Swagger UI) ★★★
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
