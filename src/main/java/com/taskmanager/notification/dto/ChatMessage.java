@@ -1,4 +1,4 @@
-package com.taskmanager.notification.model;
+package com.taskmanager.notification.dto;
 
 public class ChatMessage {
     private String sender;

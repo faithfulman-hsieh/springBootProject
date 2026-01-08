@@ -1,12 +1,13 @@
 package com.taskmanager.notification.controller;
 
-import com.taskmanager.notification.model.ChatMessage;
+import com.taskmanager.notification.dto.ChatMessage;
 import com.taskmanager.notification.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,7 +33,6 @@ public class ChatController {
         notificationService.sendGlobalMessage(chatMessage);
     }
 
-    // ★★★ 新增：處理私訊的 Endpoint ★★★
     @MessageMapping("/chat.sendPrivateMessage")
     public void sendPrivateMessage(@Payload ChatMessage chatMessage) {
         notificationService.sendPrivateMessage(chatMessage);
@@ -63,6 +63,34 @@ public class ChatController {
     @GetMapping("/api/chat/public-history")
     public ResponseEntity<List<ChatMessage>> getPublicHistory() {
         return ResponseEntity.ok(notificationService.getPublicHistory());
+    }
+
+    // ★★★ 新增：獲取私訊歷史 ★★★
+    @GetMapping("/api/chat/history/{contact}")
+    public ResponseEntity<List<ChatMessage>> getPrivateHistory(
+            @PathVariable String contact,
+            Authentication authentication) {
+        String currentUser = authentication.getName();
+        return ResponseEntity.ok(notificationService.getPrivateHistory(currentUser, contact));
+    }
+
+    // ★★★ 新增：獲取未讀數量 ★★★
+    @GetMapping("/api/chat/unread/{contact}")
+    public ResponseEntity<Long> getUnreadCount(
+            @PathVariable String contact,
+            Authentication authentication) {
+        String currentUser = authentication.getName();
+        return ResponseEntity.ok(notificationService.getUnreadCount(contact, currentUser));
+    }
+
+    // ★★★ 新增：標記已讀 ★★★
+    @PostMapping("/api/chat/read/{contact}")
+    public ResponseEntity<Void> markAsRead(
+            @PathVariable String contact,
+            Authentication authentication) {
+        String currentUser = authentication.getName();
+        notificationService.markAsRead(contact, currentUser);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/api/chat/send")
