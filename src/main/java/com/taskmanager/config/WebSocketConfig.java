@@ -1,6 +1,8 @@
 package com.taskmanager.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -10,25 +12,30 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    @Override
-    public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // 設定 WebSocket 連線端點，允許跨域
-        registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
-                .withSockJS(); // 啟用 SockJS 作為備援
+    private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+
+    @Autowired
+    public WebSocketConfig(WebSocketAuthInterceptor webSocketAuthInterceptor) {
+        this.webSocketAuthInterceptor = webSocketAuthInterceptor;
     }
 
     @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // 設定訊息代理的前綴
-        // /topic: 廣播訊息 (如：聊天室)
-        // /queue: 點對點訊息 (如：個人通知、語音信令)
-        registry.enableSimpleBroker("/topic", "/queue");
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic", "/queue");
+        config.setApplicationDestinationPrefixes("/app");
+        config.setUserDestinationPrefix("/user"); // 啟用點對點訊息的前綴
+    }
 
-        // 設定客戶端發送訊息的前綴 (例如前端送給後端)
-        registry.setApplicationDestinationPrefixes("/app");
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
+    }
 
-        // 設定點對點推播的前綴 (給特定使用者發通知用)
-        registry.setUserDestinationPrefix("/user");
+    // ★★★ 新增：註冊攔截器 ★★★
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(webSocketAuthInterceptor);
     }
 }

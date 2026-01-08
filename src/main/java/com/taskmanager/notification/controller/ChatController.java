@@ -7,12 +7,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Controller; // 注意：這裡可以是 Controller 或 RestController，混合使用時要注意 ResponseBody
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@RestController // 改為 RestController 以支援 REST API
+@RestController
 public class ChatController {
 
     private final NotificationService notificationService;
@@ -31,6 +30,12 @@ public class ChatController {
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage chatMessage) {
         notificationService.sendGlobalMessage(chatMessage);
+    }
+
+    // ★★★ 新增：處理私訊的 Endpoint ★★★
+    @MessageMapping("/chat.sendPrivateMessage")
+    public void sendPrivateMessage(@Payload ChatMessage chatMessage) {
+        notificationService.sendPrivateMessage(chatMessage);
     }
 
     @MessageMapping("/chat.addUser")
@@ -55,13 +60,11 @@ public class ChatController {
     //  REST Endpoints (HTTP)
     // ==========================================
 
-    // ★★★ 新增：獲取歷史訊息 API ★★★
     @GetMapping("/api/chat/public-history")
     public ResponseEntity<List<ChatMessage>> getPublicHistory() {
         return ResponseEntity.ok(notificationService.getPublicHistory());
     }
 
-    // ★★★ 新增：REST 發送訊息 API (可供 Postman 測試或前端使用) ★★★
     @PostMapping("/api/chat/send")
     public ResponseEntity<Void> sendRestMessage(@RequestBody ChatMessage chatMessage) {
         notificationService.sendGlobalMessage(chatMessage);

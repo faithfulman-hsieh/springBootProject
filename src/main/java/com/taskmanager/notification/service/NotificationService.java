@@ -17,7 +17,7 @@ public class NotificationService {
     private final SimpMessagingTemplate messagingTemplate;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
-    // ★★★ 新增：暫存聊天記錄 (重啟後會消失，若需持久化可改用 DB) ★★★
+    // 暫存聊天記錄
     private final List<ChatMessage> history = new CopyOnWriteArrayList<>();
 
     @Autowired
@@ -28,13 +28,34 @@ public class NotificationService {
     public void sendGlobalMessage(ChatMessage message) {
         message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
 
-        // 儲存到歷史紀錄 (限制最近 50 筆以免佔用過多記憶體)
         if (history.size() >= 50) {
             history.remove(0);
         }
         history.add(message);
 
         messagingTemplate.convertAndSend("/topic/public-chat", message);
+    }
+
+    // ★★★ 新增：發送私訊的方法 ★★★
+    public void sendPrivateMessage(ChatMessage message) {
+        message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
+
+        // 1. 發送給接收者 (Receiver)
+        // 對應前端訂閱的路徑: /user/queue/messages
+        messagingTemplate.convertAndSendToUser(
+                message.getReceiver(),
+                "/queue/messages",
+                message
+        );
+
+        // 2. 同時發送給發送者 (Sender) - 讓自己的介面也能同步顯示這條訊息
+        messagingTemplate.convertAndSendToUser(
+                message.getSender(),
+                "/queue/messages",
+                message
+        );
+
+        // 注意：為了隱私，這裡暫時不將私訊存入全域 history
     }
 
     public void sendNotificationToUser(String username, String content) {
@@ -47,7 +68,6 @@ public class NotificationService {
         messagingTemplate.convertAndSendToUser(username, "/queue/notifications", message);
     }
 
-    // ★★★ 新增：取得歷史紀錄 ★★★
     public List<ChatMessage> getPublicHistory() {
         return new ArrayList<>(history);
     }
