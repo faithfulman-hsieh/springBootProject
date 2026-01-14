@@ -86,7 +86,7 @@
 
         <userTask id="task_accounting" name="會計組入帳歸檔" activiti:candidateGroups="ROLE_USER">
             <extensionElements>
-                <activiti:formProperty id="glCode" name="會計科目代碼" type="string" default="6000-EXP" />
+                <activiti:formProperty id="glCode" name="會計科目代碼" type="string"/>
                 <activiti:formProperty id="taxId" name="統一編號" type="string" />
                 <activiti:formProperty id="archiveBox" name="傳票歸檔盒號" type="string" />
             </extensionElements>
