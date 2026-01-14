@@ -10,13 +10,13 @@ import org.activiti.engine.history.HistoricTaskInstance;
 import org.activiti.engine.runtime.ProcessInstance;
 import org.activiti.engine.task.Task;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority; // ★★★ 新增 Import ★★★
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*; // 確保有 import java.util.*
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,7 +51,6 @@ public class TaskManagerService {
         return "user";
     }
 
-    // ★★★ 新增：取得目前使用者的角色清單 (即 Activiti 的 Groups) ★★★
     private List<String> getUserRoles() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -77,15 +76,12 @@ public class TaskManagerService {
         return convertTasks(activitiTasks, null);
     }
 
-    // ★★★ 修改：手動處理 User 和 Group 的聯集查詢 ★★★
     public List<TaskDto> getGroupTasks() {
         String userId = getCurrentUserId();
         List<String> groups = getUserRoles();
 
-        // 使用 Set 來避免重複 (雖然 Activiti 任務 ID 是唯一的，但分開查詢可能會重疊)
         Map<String, Task> taskMap = new HashMap<>();
 
-        // 1. 查詢「我是候選人」的任務 (Direct Candidate User)
         List<Task> userTasks = taskService.createTaskQuery()
                 .taskCandidateUser(userId)
                 .taskUnassigned()
@@ -94,8 +90,6 @@ public class TaskManagerService {
             taskMap.put(t.getId(), t);
         }
 
-        // 2. 查詢「我的群組是候選群組」的任務 (Candidate Group)
-        // 這是解決 "No UserGroupManager" 警告的關鍵：我們明確告訴引擎要查哪些群組
         if (!groups.isEmpty()) {
             List<Task> groupTasks = taskService.createTaskQuery()
                     .taskCandidateGroupIn(groups)
@@ -106,9 +100,8 @@ public class TaskManagerService {
             }
         }
 
-        // 3. 轉為 List 並排序
         List<Task> finalTasks = new ArrayList<>(taskMap.values());
-        finalTasks.sort((t1, t2) -> t2.getCreateTime().compareTo(t1.getCreateTime())); // 降序
+        finalTasks.sort((t1, t2) -> t2.getCreateTime().compareTo(t1.getCreateTime()));
 
         return convertTasks(finalTasks, "待認領");
     }
@@ -179,6 +172,7 @@ public class TaskManagerService {
             return new ArrayList<>();
         }
 
+        // 取得目前流程的所有變數
         Map<String, Object> variables = taskService.getVariables(taskId);
 
         UserTask userTask = (UserTask) flowElement;
@@ -192,10 +186,18 @@ public class TaskManagerService {
             String type = prop.getType() != null ? prop.getType() : "string";
             field.put("type", mapFormPropertyType(type));
             field.put("required", prop.isRequired());
-            field.put("disabled", !prop.isWriteable());
+            field.put("disabled", !prop.isWriteable()); // 用於前端判斷唯讀欄位
 
+            // ★★★ 修正：將變數值填入 value，並處理日期格式 ★★★
             if (variables.containsKey(prop.getId())) {
-                field.put("value", variables.get(prop.getId()));
+                Object val = variables.get(prop.getId());
+                // 如果是日期物件，轉成字串給前端，避免格式問題
+                if (val instanceof Date) {
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd");
+                    field.put("value", sdf.format((Date) val));
+                } else {
+                    field.put("value", val);
+                }
             }
 
             if ("enum".equals(type)) {
