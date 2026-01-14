@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:activiti="http://activiti.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.activiti.org/processdef">
+
+    <process id="advancedExpenseProcess" name="高階差旅報銷流程" isExecutable="true">
+
+        <startEvent id="startEvent" name="提交報銷" activiti:initiator="initiator">
+            <extensionElements>
+                <activiti:formProperty id="expenseDate" name="發生日期" type="date" required="true" />
+                <activiti:formProperty id="amount" name="報銷金額" type="long" required="true" />
+                <activiti:formProperty id="category" name="費用類別" type="enum">
+                    <activiti:value id="travel" name="差旅費" />
+                    <activiti:value id="meal" name="交際費" />
+                    <activiti:value id="equipment" name="設備採購" />
+                </activiti:formProperty>
+                <activiti:formProperty id="reason" name="事由說明" type="string" />
+                <activiti:formProperty id="attachment" name="單據證明" type="string" />
+            </extensionElements>
+        </startEvent>
+
+        <userTask id="task_modify" name="被駁回-請修改報銷單" activiti:assignee="admin">
+            <extensionElements>
+                <activiti:formProperty id="managerComment" name="主管審批意見(若有)" type="string" writable="false" />
+                <activiti:formProperty id="voteComment" name="委員會意見(若有)" type="string" writable="false" />
+
+                <activiti:formProperty id="expenseDate" name="發生日期" type="date" required="true" />
+                <activiti:formProperty id="amount" name="報銷金額" type="long" required="true" />
+                <activiti:formProperty id="category" name="費用類別" type="enum">
+                    <activiti:value id="travel" name="差旅費" />
+                    <activiti:value id="meal" name="交際費" />
+                    <activiti:value id="equipment" name="設備採購" />
+                </activiti:formProperty>
+                <activiti:formProperty id="reason" name="事由說明" type="string" />
+                <activiti:formProperty id="attachment" name="單據證明" type="string" />
+            </extensionElements>
+        </userTask>
+
+        <exclusiveGateway id="gateway_amount_check" name="金額判斷"></exclusiveGateway>
+
+        <userTask id="task_manager_approve" name="部門主管審批" activiti:candidateGroups="ROLE_MANAGER">
+            <extensionElements>
+                <activiti:formProperty id="managerComment" name="主管審批意見" type="string" />
+                <activiti:formProperty id="approved" name="審核結果" type="enum" required="true">
+                    <activiti:value id="true" name="核准 (Approve)"/>
+                    <activiti:value id="false" name="駁回 (Reject)"/>
+                </activiti:formProperty>
+            </extensionElements>
+        </userTask>
+
+        <userTask id="task_committee_vote" name="決策委員會會簽(3人)" activiti:candidateGroups="ROLE_ADMIN">
+            <extensionElements>
+                <activiti:formProperty id="riskLevel" name="風險評估" type="enum">
+                    <activiti:value id="low" name="低風險" />
+                    <activiti:value id="medium" name="中風險" />
+                    <activiti:value id="high" name="高風險" />
+                </activiti:formProperty>
+                <activiti:formProperty id="voteComment" name="委員意見" type="string" />
+                <activiti:formProperty id="approved" name="審核結果" type="enum" required="true">
+                    <activiti:value id="true" name="核准 (Approve)"/>
+                    <activiti:value id="false" name="駁回 (Reject)"/>
+                </activiti:formProperty>
+            </extensionElements>
+            <multiInstanceLoopCharacteristics isSequential="false">
+                <loopCardinality>3</loopCardinality>
+                <completionCondition>${approved == false}</completionCondition>
+            </multiInstanceLoopCharacteristics>
+        </userTask>
+
+        <exclusiveGateway id="gateway_approval_decision" name="審批結果匯聚"></exclusiveGateway>
+
+        <parallelGateway id="gateway_parallel_split" name="分辦開始"></parallelGateway>
+
+        <userTask id="task_cashier" name="出納組匯款" activiti:candidateGroups="ROLE_USER">
+            <extensionElements>
+                <activiti:formProperty id="bankTxId" name="銀行交易序號" type="string" required="true" />
+                <activiti:formProperty id="paymentDate" name="實際匯款日" type="date" />
+            </extensionElements>
+        </userTask>
+
+        <userTask id="task_accounting" name="會計組入帳歸檔" activiti:candidateGroups="ROLE_USER">
+            <extensionElements>
+                <activiti:formProperty id="glCode" name="會計科目代碼" type="string" default="6000-EXP" />
+                <activiti:formProperty id="taxId" name="統一編號" type="string" />
+                <activiti:formProperty id="archiveBox" name="傳票歸檔盒號" type="string" />
+            </extensionElements>
+        </userTask>
+
+        <parallelGateway id="gateway_parallel_join" name="分辦結束"></parallelGateway>
+
+        <endEvent id="endEvent" name="流程結束"></endEvent>
+
+        <sequenceFlow id="flow_1" sourceRef="startEvent" targetRef="gateway_amount_check"></sequenceFlow>
+
+        <sequenceFlow id="flow_3" name="≦ 1萬" sourceRef="gateway_amount_check" targetRef="task_manager_approve">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${amount <= 10000}]]></conditionExpression>
+        </sequenceFlow>
+
+        <sequenceFlow id="flow_4" name="> 1萬" sourceRef="gateway_amount_check" targetRef="task_committee_vote">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${amount > 10000}]]></conditionExpression>
+        </sequenceFlow>
+
+        <sequenceFlow id="flow_5" sourceRef="task_manager_approve" targetRef="gateway_approval_decision"></sequenceFlow>
+        <sequenceFlow id="flow_6" sourceRef="task_committee_vote" targetRef="gateway_approval_decision"></sequenceFlow>
+
+        <sequenceFlow id="flow_reject" name="駁回 / 需修改" sourceRef="gateway_approval_decision" targetRef="task_modify">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == false}]]></conditionExpression>
+        </sequenceFlow>
+
+        <sequenceFlow id="flow_resubmit" name="重新提交" sourceRef="task_modify" targetRef="gateway_amount_check"></sequenceFlow>
+
+        <sequenceFlow id="flow_7" name="核准通過" sourceRef="gateway_approval_decision" targetRef="gateway_parallel_split">
+            <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approved == true}]]></conditionExpression>
+        </sequenceFlow>
+
+        <sequenceFlow id="flow_8" sourceRef="gateway_parallel_split" targetRef="task_cashier"></sequenceFlow>
+        <sequenceFlow id="flow_9" sourceRef="gateway_parallel_split" targetRef="task_accounting"></sequenceFlow>
+        <sequenceFlow id="flow_10" sourceRef="task_cashier" targetRef="gateway_parallel_join"></sequenceFlow>
+        <sequenceFlow id="flow_11" sourceRef="task_accounting" targetRef="gateway_parallel_join"></sequenceFlow>
+        <sequenceFlow id="flow_12" sourceRef="gateway_parallel_join" targetRef="endEvent"></sequenceFlow>
+
+    </process>
+
+    <bpmndi:BPMNDiagram id="BPMNDiagram_advancedExpenseProcess">
+        <bpmndi:BPMNPlane bpmnElement="advancedExpenseProcess" id="BPMNPlane_advancedExpenseProcess">
+
+            <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+                <dc:Bounds height="30.0" width="30.0" x="120.0" y="250.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="gateway_amount_check" id="BPMNShape_gateway_amount_check">
+                <dc:Bounds height="40.0" width="40.0" x="220.0" y="245.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="44.0" x="218.0" y="285.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="task_modify" id="BPMNShape_task_modify">
+                <dc:Bounds height="80.0" width="100.0" x="350.0" y="100.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="task_manager_approve" id="BPMNShape_task_manager_approve">
+                <dc:Bounds height="80.0" width="100.0" x="350.0" y="225.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="task_committee_vote" id="BPMNShape_task_committee_vote">
+                <dc:Bounds height="80.0" width="100.0" x="350.0" y="370.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="gateway_approval_decision" id="BPMNShape_gateway_approval_decision">
+                <dc:Bounds height="40.0" width="40.0" x="530.0" y="245.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="66.0" x="517.0" y="285.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="gateway_parallel_split" id="BPMNShape_gateway_parallel_split">
+                <dc:Bounds height="40.0" width="40.0" x="630.0" y="245.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="task_cashier" id="BPMNShape_task_cashier">
+                <dc:Bounds height="80.0" width="100.0" x="730.0" y="140.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="task_accounting" id="BPMNShape_task_accounting">
+                <dc:Bounds height="80.0" width="100.0" x="730.0" y="350.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="gateway_parallel_join" id="BPMNShape_gateway_parallel_join">
+                <dc:Bounds height="40.0" width="40.0" x="880.0" y="245.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+                <dc:Bounds height="28.0" width="28.0" x="980.0" y="251.0"/>
+            </bpmndi:BPMNShape>
+
+            <bpmndi:BPMNEdge bpmnElement="flow_1" id="BPMNEdge_flow_1">
+                <di:waypoint x="150.0" y="265.0"/>
+                <di:waypoint x="220.0" y="265.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_3" id="BPMNEdge_flow_3">
+                <di:waypoint x="260.0" y="265.0"/>
+                <di:waypoint x="350.0" y="265.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="40.0" x="270.0" y="240.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_4" id="BPMNEdge_flow_4">
+                <di:waypoint x="240.0" y="285.0"/>
+                <di:waypoint x="240.0" y="410.0"/>
+                <di:waypoint x="350.0" y="410.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="35.0" x="250.0" y="380.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_5" id="BPMNEdge_flow_5">
+                <di:waypoint x="450.0" y="265.0"/>
+                <di:waypoint x="530.0" y="265.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_6" id="BPMNEdge_flow_6">
+                <di:waypoint x="450.0" y="410.0"/>
+                <di:waypoint x="550.0" y="410.0"/>
+                <di:waypoint x="550.0" y="285.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_reject" id="BPMNEdge_flow_reject">
+                <di:waypoint x="550.0" y="245.0"/>
+                <di:waypoint x="550.0" y="140.0"/>
+                <di:waypoint x="450.0" y="140.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="70.0" x="480.0" y="120.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_resubmit" id="BPMNEdge_flow_resubmit">
+                <di:waypoint x="350.0" y="140.0"/>
+                <di:waypoint x="240.0" y="140.0"/>
+                <di:waypoint x="240.0" y="245.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="44.0" x="260.0" y="150.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_7" id="BPMNEdge_flow_7">
+                <di:waypoint x="570.0" y="265.0"/>
+                <di:waypoint x="630.0" y="265.0"/>
+                <bpmndi:BPMNLabel>
+                    <dc:Bounds height="14.0" width="44.0" x="580.0" y="240.0"/>
+                </bpmndi:BPMNLabel>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_8" id="BPMNEdge_flow_8">
+                <di:waypoint x="650.0" y="245.0"/>
+                <di:waypoint x="650.0" y="180.0"/>
+                <di:waypoint x="730.0" y="180.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_9" id="BPMNEdge_flow_9">
+                <di:waypoint x="650.0" y="285.0"/>
+                <di:waypoint x="650.0" y="390.0"/>
+                <di:waypoint x="730.0" y="390.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_10" id="BPMNEdge_flow_10">
+                <di:waypoint x="830.0" y="180.0"/>
+                <di:waypoint x="900.0" y="180.0"/>
+                <di:waypoint x="900.0" y="245.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_11" id="BPMNEdge_flow_11">
+                <di:waypoint x="830.0" y="390.0"/>
+                <di:waypoint x="900.0" y="390.0"/>
+                <di:waypoint x="900.0" y="285.0"/>
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge bpmnElement="flow_12" id="BPMNEdge_flow_12">
+                <di:waypoint x="920.0" y="265.0"/>
+                <di:waypoint x="980.0" y="265.0"/>
+            </bpmndi:BPMNEdge>
+
+        </bpmndi:BPMNPlane>
+    </bpmndi:BPMNDiagram>
+</definitions>

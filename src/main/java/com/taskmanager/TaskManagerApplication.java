@@ -39,32 +39,57 @@ public class TaskManagerApplication {
 			if (roleRepository.count() == 0) {
 				Role userRole = new Role("ROLE_USER");
 				Role adminRole = new Role("ROLE_ADMIN");
-				// ★★★ 新增 IT 角色 ★★★
+				Role managerRole = new Role("ROLE_MANAGER");
 				Role itRole = new Role("ROLE_IT");
 
 				roleRepository.save(userRole);
 				roleRepository.save(adminRole);
+				roleRepository.save(managerRole);
 				roleRepository.save(itRole);
 
-				// User 1: admin
-				User admin = new User("admin", "admin@example.com", passwordEncoder.encode("admin"));
-				admin.getRoles().add(adminRole);
-				userRepository.save(admin);
-
-				// User 2: user
-				User user = new User("user", "user@example.com", passwordEncoder.encode("user"));
+				// User
+				User user = new User("user", "user@example.com", passwordEncoder.encode("123"));
 				user.getRoles().add(userRole);
 				userRepository.save(user);
+				User user2 = new User("user2", "user@example.com", passwordEncoder.encode("123"));
+				user2.getRoles().add(userRole);
+				userRepository.save(user2);
+				User user3 = new User("user3", "user@example.com", passwordEncoder.encode("123"));
+				user3.getRoles().add(userRole);
+				userRepository.save(user3);
 
-				// User 3: manager
-				User manager = new User("manager", "manager@example.com", passwordEncoder.encode("manager"));
-				manager.getRoles().add(userRole);
+				// Admin
+				User admin = new User("admin", "admin@example.com", passwordEncoder.encode("123"));
+				admin.getRoles().add(adminRole);
+				userRepository.save(admin);
+				User admin2 = new User("admin2", "admin@example.com", passwordEncoder.encode("123"));
+				admin2.getRoles().add(adminRole);
+				userRepository.save(admin2);
+				User admin3 = new User("admin3", "admin@example.com", passwordEncoder.encode("123"));
+				admin3.getRoles().add(adminRole);
+				userRepository.save(admin3);
+
+				// Manager
+				User manager = new User("manager", "manager@example.com", passwordEncoder.encode("123"));
+				manager.getRoles().add(managerRole);
 				userRepository.save(manager);
+				User manager2 = new User("manager2", "manager@example.com", passwordEncoder.encode("123"));
+				manager2.getRoles().add(managerRole);
+				userRepository.save(manager2);
+				User manager3 = new User("manager3", "manager@example.com", passwordEncoder.encode("123"));
+				manager3.getRoles().add(managerRole);
+				userRepository.save(manager3);
 
-				// ★★★ 新增 IT User ★★★
-				User ituser = new User("ituser", "ituser@example.com", passwordEncoder.encode("ituser"));
-				ituser.getRoles().add(itRole); // 給予 IT 權限
+				// IT User
+				User ituser = new User("ituser", "ituser@example.com", passwordEncoder.encode("123"));
+				ituser.getRoles().add(itRole);
 				userRepository.save(ituser);
+				User ituser2 = new User("ituser2", "ituser@example.com", passwordEncoder.encode("123"));
+				ituser2.getRoles().add(itRole);
+				userRepository.save(ituser2);
+				User ituser3 = new User("ituser3", "ituser@example.com", passwordEncoder.encode("123"));
+				ituser3.getRoles().add(itRole);
+				userRepository.save(ituser3);
 
 				System.out.println("✅ 初始化使用者(admin, user, manager, ituser)與角色完成");
 			}
