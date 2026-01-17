@@ -7,16 +7,24 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.user.SimpUser; // ★★★ [線上使用者狀態] ★★★
+import org.springframework.messaging.simp.user.SimpUserRegistry; // ★★★ [線上使用者狀態] ★★★
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set; // ★★★ [線上使用者狀態] ★★★
+import java.util.stream.Collectors; // ★★★ [線上使用者狀態] ★★★
 
 @RestController
 public class ChatController {
 
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
+
+    // ★★★ [線上使用者狀態] 注入 Registry 以獲取即時連線名單 ★★★
+    @Autowired
+    private SimpUserRegistry simpUserRegistry;
 
     @Autowired
     public ChatController(NotificationService notificationService, SimpMessagingTemplate messagingTemplate) {
@@ -91,6 +99,15 @@ public class ChatController {
         String currentUser = authentication.getName();
         notificationService.markAsRead(contact, currentUser);
         return ResponseEntity.ok().build();
+    }
+
+    // ★★★ [線上使用者狀態] 新增 API：前端初始化時拉取線上名單 ★★★
+    @GetMapping("/api/chat/online-users")
+    public ResponseEntity<Set<String>> getOnlineUsers() {
+        Set<String> onlineUsers = simpUserRegistry.getUsers().stream()
+                .map(SimpUser::getName)
+                .collect(Collectors.toSet());
+        return ResponseEntity.ok(onlineUsers);
     }
 
     @PostMapping("/api/chat/send")
