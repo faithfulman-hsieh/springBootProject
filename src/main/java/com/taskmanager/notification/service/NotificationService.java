@@ -6,113 +6,89 @@ import com.taskmanager.notification.repository.ChatMessageRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 @Service
 public class NotificationService {
 
+    private final ChatMessageRepository repository;
     private final SimpMessagingTemplate messagingTemplate;
-    private final ChatMessageRepository chatRepository;
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-
-    // 暫存廣播聊天記錄 (原有功能保持不變)
-    private final List<ChatMessage> history = new CopyOnWriteArrayList<>();
 
     @Autowired
-    public NotificationService(SimpMessagingTemplate messagingTemplate, ChatMessageRepository chatRepository) {
+    public NotificationService(ChatMessageRepository repository, SimpMessagingTemplate messagingTemplate) {
+        this.repository = repository;
         this.messagingTemplate = messagingTemplate;
-        this.chatRepository = chatRepository;
     }
 
-    // 發送廣播訊息
     public void sendGlobalMessage(ChatMessage message) {
-        message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
-
-        if (history.size() >= 50) {
-            history.remove(0);
-        }
-        history.add(message);
-
+        // ★★★ [Fix] 修正方法名稱：DTO 使用 setTime ★★★
+        message.setTime(LocalDateTime.now().toString());
+        saveMessage(message);
         messagingTemplate.convertAndSend("/topic/public-chat", message);
     }
 
-    // ★★★ 修改：發送私訊 (整合資料庫儲存) ★★★
-    @Transactional
     public void sendPrivateMessage(ChatMessage message) {
-        // 1. 存入資料庫
-        ChatMessageEntity entity = new ChatMessageEntity();
-        entity.setSender(message.getSender());
-        entity.setReceiver(message.getReceiver());
-        entity.setContent(message.getContent());
-        entity.setType(message.getType());
-        entity.setSendTime(LocalDateTime.now());
-        entity.setRead(false);
-        chatRepository.save(entity);
+        // ★★★ [Fix] 修正方法名稱：DTO 使用 setTime ★★★
+        message.setTime(LocalDateTime.now().toString());
+        saveMessage(message);
+        messagingTemplate.convertAndSendToUser(message.getReceiver(), "/queue/messages", message);
 
-        // 2. 設定顯示時間
-        message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
-
-        // 3. 發送給接收者
-        messagingTemplate.convertAndSendToUser(
-                message.getReceiver(),
-                "/queue/messages",
-                message
-        );
-
-        // 4. 同時發送給發送者 (讓自己的前端也能即時顯示)
-        messagingTemplate.convertAndSendToUser(
-                message.getSender(),
-                "/queue/messages",
-                message
-        );
-    }
-
-    // ★★★ 新增：獲取私人歷史紀錄 ★★★
-    public List<ChatMessage> getPrivateHistory(String user1, String user2) {
-        List<ChatMessageEntity> entities = chatRepository.findChatHistory(user1, user2);
-        return entities.stream().map(this::convertToDto).collect(Collectors.toList());
-    }
-
-    // ★★★ 新增：標記已讀 ★★★
-    @Transactional
-    public void markAsRead(String sender, String receiver) {
-        chatRepository.markMessagesAsRead(sender, receiver);
-    }
-
-    // ★★★ 新增：獲取未讀數量 ★★★
-    public long getUnreadCount(String sender, String receiver) {
-        return chatRepository.countBySenderAndReceiverAndIsReadFalse(sender, receiver);
-    }
-
-    public void sendNotificationToUser(String username, String content) {
-        ChatMessage message = new ChatMessage();
-        message.setSender("System");
-        message.setContent(content);
-        message.setType("NOTIFICATION");
-        message.setTime(LocalDateTime.now().format(TIME_FORMATTER));
-
-        messagingTemplate.convertAndSendToUser(username, "/queue/notifications", message);
+        // 同步發送給寄件者自己
+        messagingTemplate.convertAndSendToUser(message.getSender(), "/queue/messages", message);
     }
 
     public List<ChatMessage> getPublicHistory() {
-        return new ArrayList<>(history);
+        return repository.findByReceiverIsNullOrderByTimestampAsc().stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
     }
 
-    // Entity 轉 DTO 工具方法
+    public List<ChatMessage> getPrivateHistory(String user1, String user2) {
+        return repository.findPrivateMessages(user1, user2).stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    // ★★★ [即時已讀回執] 實作未讀計數 ★★★
+    public long getUnreadCount(String sender, String receiver) {
+        return repository.countBySenderAndReceiverAndIsReadFalse(sender, receiver);
+    }
+
+    // ★★★ [即時已讀回執] 實作標記已讀 ★★★
+    public void markAsRead(String sender, String receiver) {
+        repository.markMessagesAsRead(sender, receiver);
+    }
+
+    private void saveMessage(ChatMessage dto) {
+        if ("TYPING".equals(dto.getType()) || "READ".equals(dto.getType())) {
+            return;
+        }
+
+        ChatMessageEntity entity = new ChatMessageEntity();
+        entity.setSender(dto.getSender());
+        entity.setReceiver(dto.getReceiver());
+        entity.setContent(dto.getContent());
+        entity.setType(dto.getType());
+        // Entity 使用 setTimestamp
+        entity.setTimestamp(LocalDateTime.now());
+        // ★★★ [即時已讀回執] 預設為未讀 ★★★
+        entity.setRead(false);
+
+        repository.save(entity);
+    }
+
     private ChatMessage convertToDto(ChatMessageEntity entity) {
         ChatMessage dto = new ChatMessage();
         dto.setSender(entity.getSender());
         dto.setReceiver(entity.getReceiver());
         dto.setContent(entity.getContent());
         dto.setType(entity.getType());
-        dto.setTime(entity.getSendTime().format(TIME_FORMATTER));
+        dto.setTime(entity.getTimestamp().toString());
+        // ★★★ [即時已讀回執] 轉換已讀狀態 ★★★
+        dto.setRead(entity.isRead());
         return dto;
     }
 }

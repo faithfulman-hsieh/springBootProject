@@ -2,6 +2,7 @@ package com.taskmanager.notification.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -13,15 +14,15 @@ public class ChatMessageEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String sender;    // 發送者 username
-    private String receiver;  // 接收者 username (null 代表廣播)
-
-    @Column(columnDefinition = "TEXT")
+    private String sender;
+    private String receiver;
     private String content;
+    private LocalDateTime timestamp;
 
-    private String type;      // CHAT, JOIN, LEAVE...
+    // 訊息類型 (CHAT, JOIN, LEAVE 等)
+    private String type;
 
-    private LocalDateTime sendTime;
-
-    private boolean isRead = false; // 未讀狀態
+    // ★★★ [即時已讀回執] 新增資料庫欄位：是否已讀 ★★★
+    @Column(name = "is_read")
+    private boolean isRead = false;
 }

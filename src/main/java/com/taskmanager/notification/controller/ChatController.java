@@ -52,15 +52,13 @@ public class ChatController {
         notificationService.sendGlobalMessage(chatMessage);
     }
 
-    // ★★★ [輸入中提示] 新增端點：處理輸入中訊號 (不存 DB) ★★★
     @MessageMapping("/chat.typing")
     public void typing(@Payload ChatMessage chatMessage) {
         chatMessage.setType("TYPING");
-        // 判斷是私聊還是群聊
         if (chatMessage.getReceiver() != null && !chatMessage.getReceiver().isEmpty()) {
             messagingTemplate.convertAndSendToUser(
                     chatMessage.getReceiver(),
-                    "/queue/messages", // 重用現有的私訊訂閱頻道
+                    "/queue/messages",
                     chatMessage
             );
         } else {
@@ -104,12 +102,27 @@ public class ChatController {
         return ResponseEntity.ok(notificationService.getUnreadCount(contact, currentUser));
     }
 
+    // ★★★ [即時已讀回執] 修改：標記已讀後，通知發送者 ★★★
     @PostMapping("/api/chat/read/{contact}")
     public ResponseEntity<Void> markAsRead(
             @PathVariable String contact,
             Authentication authentication) {
         String currentUser = authentication.getName();
+        // 1. 更新資料庫狀態
         notificationService.markAsRead(contact, currentUser);
+
+        // 2. 發送即時通知給「原訊息發送者 (contact)」
+        ChatMessage readReceipt = new ChatMessage();
+        readReceipt.setType("READ");
+        readReceipt.setSender(currentUser);
+        readReceipt.setReceiver(contact);
+
+        messagingTemplate.convertAndSendToUser(
+                contact,
+                "/queue/messages",
+                readReceipt
+        );
+
         return ResponseEntity.ok().build();
     }
 
