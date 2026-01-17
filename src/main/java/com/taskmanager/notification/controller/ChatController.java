@@ -7,14 +7,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.simp.user.SimpUser; // ★★★ [線上使用者狀態] ★★★
-import org.springframework.messaging.simp.user.SimpUserRegistry; // ★★★ [線上使用者狀態] ★★★
+import org.springframework.messaging.simp.user.SimpUser;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Set; // ★★★ [線上使用者狀態] ★★★
-import java.util.stream.Collectors; // ★★★ [線上使用者狀態] ★★★
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 public class ChatController {
@@ -22,7 +22,6 @@ public class ChatController {
     private final NotificationService notificationService;
     private final SimpMessagingTemplate messagingTemplate;
 
-    // ★★★ [線上使用者狀態] 注入 Registry 以獲取即時連線名單 ★★★
     @Autowired
     private SimpUserRegistry simpUserRegistry;
 
@@ -53,6 +52,22 @@ public class ChatController {
         notificationService.sendGlobalMessage(chatMessage);
     }
 
+    // ★★★ [輸入中提示] 新增端點：處理輸入中訊號 (不存 DB) ★★★
+    @MessageMapping("/chat.typing")
+    public void typing(@Payload ChatMessage chatMessage) {
+        chatMessage.setType("TYPING");
+        // 判斷是私聊還是群聊
+        if (chatMessage.getReceiver() != null && !chatMessage.getReceiver().isEmpty()) {
+            messagingTemplate.convertAndSendToUser(
+                    chatMessage.getReceiver(),
+                    "/queue/messages", // 重用現有的私訊訂閱頻道
+                    chatMessage
+            );
+        } else {
+            messagingTemplate.convertAndSend("/topic/public-chat", chatMessage);
+        }
+    }
+
     @MessageMapping("/chat.signal")
     public void signal(@Payload ChatMessage message) {
         if (message.getReceiver() != null && !message.getReceiver().isEmpty()) {
@@ -73,7 +88,6 @@ public class ChatController {
         return ResponseEntity.ok(notificationService.getPublicHistory());
     }
 
-    // ★★★ 新增：獲取私訊歷史 ★★★
     @GetMapping("/api/chat/history/{contact}")
     public ResponseEntity<List<ChatMessage>> getPrivateHistory(
             @PathVariable String contact,
@@ -82,7 +96,6 @@ public class ChatController {
         return ResponseEntity.ok(notificationService.getPrivateHistory(currentUser, contact));
     }
 
-    // ★★★ 新增：獲取未讀數量 ★★★
     @GetMapping("/api/chat/unread/{contact}")
     public ResponseEntity<Long> getUnreadCount(
             @PathVariable String contact,
@@ -91,7 +104,6 @@ public class ChatController {
         return ResponseEntity.ok(notificationService.getUnreadCount(contact, currentUser));
     }
 
-    // ★★★ 新增：標記已讀 ★★★
     @PostMapping("/api/chat/read/{contact}")
     public ResponseEntity<Void> markAsRead(
             @PathVariable String contact,
@@ -101,7 +113,6 @@ public class ChatController {
         return ResponseEntity.ok().build();
     }
 
-    // ★★★ [線上使用者狀態] 新增 API：前端初始化時拉取線上名單 ★★★
     @GetMapping("/api/chat/online-users")
     public ResponseEntity<Set<String>> getOnlineUsers() {
         Set<String> onlineUsers = simpUserRegistry.getUsers().stream()

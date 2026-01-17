@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
-// ★★★ [線上使用者狀態] 新增監聽器，負責廣播 JOIN/LEAVE ★★★
 @Component
 public class WebSocketEventListener {
 
@@ -32,14 +31,11 @@ public class WebSocketEventListener {
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
         if (headerAccessor.getUser() != null) {
             String username = headerAccessor.getUser().getName();
-            logger.info("使用者上線: {}", username);
-
-            ChatMessage chatMessage = new ChatMessage();
-            chatMessage.setType("JOIN");
-            chatMessage.setSender(username);
-            chatMessage.setContent("加入了聊天室");
-
-            messagingTemplate.convertAndSend("/topic/public-chat", chatMessage);
+            // ★★★ [修正重複加入訊息] ★★★
+            // 只記錄 Log，不在此處廣播 JOIN。
+            // 因為前端會在連線後主動發送 /app/chat.addUser，由 Controller 負責廣播 JOIN。
+            // 如果這裡也廣播，就會導致「XXX 加入了聊天室」出現兩次。
+            logger.info("監測到 WebSocket 連線建立: {}", username);
         }
     }
 
