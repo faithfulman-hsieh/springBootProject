@@ -51,12 +51,12 @@ public class TaskManagerApplication {
 				User user = new User("user", "user@example.com", passwordEncoder.encode("111"));
 				user.getRoles().add(userRole);
 				userRepository.save(user);
-//				User user2 = new User("user2", "user@example.com", passwordEncoder.encode("111"));
-//				user2.getRoles().add(userRole);
-//				userRepository.save(user2);
-//				User user3 = new User("user3", "user@example.com", passwordEncoder.encode("111"));
-//				user3.getRoles().add(userRole);
-//				userRepository.save(user3);
+				User user2 = new User("ellie", "user@example.com", passwordEncoder.encode("1224"));
+				user2.getRoles().add(userRole);
+				userRepository.save(user2);
+				User user3 = new User("eddie", "user@example.com", passwordEncoder.encode("1224"));
+				user3.getRoles().add(userRole);
+				userRepository.save(user3);
 
 				// Admin
 				User admin = new User("admin", "admin@example.com", passwordEncoder.encode("111"));
