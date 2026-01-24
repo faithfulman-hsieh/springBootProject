@@ -31,10 +31,6 @@ public class WebSocketEventListener {
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
         if (headerAccessor.getUser() != null) {
             String username = headerAccessor.getUser().getName();
-            // ★★★ [修正重複加入訊息] ★★★
-            // 只記錄 Log，不在此處廣播 JOIN。
-            // 因為前端會在連線後主動發送 /app/chat.addUser，由 Controller 負責廣播 JOIN。
-            // 如果這裡也廣播，就會導致「XXX 加入了聊天室」出現兩次。
             logger.info("監測到 WebSocket 連線建立: {}", username);
         }
     }
@@ -45,7 +41,12 @@ public class WebSocketEventListener {
         if (headerAccessor.getUser() != null) {
             String username = headerAccessor.getUser().getName();
 
-            // 檢查該使用者是否還有其他連線 (避免多視窗關閉其一就顯示下線)
+            // ★★★ [Line-like Mechanism] 修改：僅記錄 Log，不廣播 LEAVE ★★★
+            // 這樣前端就不會收到「對方已離開」的訊號，保持「永遠可聯繫」的狀態。
+
+            logger.info("使用者斷線 (背景或關閉): {}", username);
+
+            /* 原本的離線廣播邏輯已註解掉
             boolean isStillConnected = simpUserRegistry.getUser(username) != null &&
                     !simpUserRegistry.getUser(username).getSessions().isEmpty();
 
@@ -58,6 +59,7 @@ public class WebSocketEventListener {
 
                 messagingTemplate.convertAndSend("/topic/public-chat", chatMessage);
             }
+            */
         }
     }
 }
