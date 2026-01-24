@@ -5,5 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByName(String name);
+    // ★★★ [Fix] 修正方法名稱以對應 User.username 欄位 ★★★
+    // 舊的 findByName 會導致 "No property name found" 錯誤，必須移除或更名
+    Optional<User> findByUsername(String username);
 }

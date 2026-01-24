@@ -11,9 +11,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api")
@@ -48,4 +52,27 @@ public class UserController {
         userUseCase.createUser(newUser);
         return ResponseEntity.ok("User added successfully!");
     }
+
+    // ★★★ [FCM Token Storage] 修正邏輯：先查 ID 再更新，保持 Service 層一致性 ★★★
+    @PostMapping("/fcm-token")
+    public ResponseEntity<?> updateFcmToken(@RequestBody Map<String, String> payload) {
+        String token = payload.get("token");
+        if (token == null || token.isEmpty()) {
+            return ResponseEntity.badRequest().body("Token is required");
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication.getName();
+
+        // 先透過 username 找到 user ID
+        Optional<User> userOpt = userUseCase.findByUsername(currentUsername);
+
+        if (userOpt.isPresent()) {
+            userUseCase.updateFcmToken(userOpt.get().getId(), token);
+            return ResponseEntity.ok().body("FCM Token updated successfully");
+        } else {
+            return ResponseEntity.status(404).body("User not found");
+        }
+    }
+
 }

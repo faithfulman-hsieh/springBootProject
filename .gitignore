@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Security / Secret Files (絕對不要上傳) ###
+src/main/resources/jproject-push-firebase.json

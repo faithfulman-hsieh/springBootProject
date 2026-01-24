@@ -1,4 +1,3 @@
-// User.java
 package com.taskmanager.account.model;
 
 import jakarta.persistence.*;
@@ -19,9 +18,16 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;
+    // ★★★ [Fix] 統一使用 username，解決 JPA 找不到 name 屬性的錯誤 ★★★
+    @Column(unique = true, nullable = false)
+    private String username;
+
     private String email;
     private String password;
+
+    // ★★★ [FCM] 確保此欄位存在 ★★★
+    @Column(name = "fcm_token")
+    private String fcmToken;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
@@ -31,8 +37,8 @@ public class User {
     )
     private Set<Role> roles = new HashSet<>();
 
-    public User(String name, String email, String password) {
-        this.name = name;
+    public User(String username, String email, String password) {
+        this.username = username;
         this.email = email;
         this.password = password;
     }

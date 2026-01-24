@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -67,6 +68,12 @@ public class UserService implements UserUseCase {
         return userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found."));
     }
 
+    // 補上 findByUsername 實作
+    @Override
+    public Optional<User> findByUsername(String username) {
+        return userRepository.findByUsername(username);
+    }
+
     @Override
     public void deleteUser(Long userId) {
         userRepository.deleteById(userId);
@@ -84,6 +91,15 @@ public class UserService implements UserUseCase {
             rolesToAssign.add(role);
         }
         user.setRoles(rolesToAssign);
+        userRepository.save(user);
+    }
+
+    // ★★★ [FCM Token Storage] 修正為使用 userId ★★★
+    @Override
+    public void updateFcmToken(Long userId, String token) {
+        // 重用 getUserById 來保持錯誤訊息的一致性
+        User user = getUserById(userId);
+        user.setFcmToken(token);
         userRepository.save(user);
     }
 

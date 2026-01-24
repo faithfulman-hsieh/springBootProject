@@ -86,10 +86,10 @@ public class WebSecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            User user = userRepository.findByName(username)
+            User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
             return new org.springframework.security.core.userdetails.User(
-                    user.getName(),
+                    user.getUsername(),
                     user.getPassword(),
                     user.getRoles().stream().map(role -> new SimpleGrantedAuthority(role.getName())).collect(Collectors.toList())
             );
