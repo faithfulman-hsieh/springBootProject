@@ -4,8 +4,7 @@ import com.taskmanager.notification.dto.ChatMessage;
 import com.taskmanager.notification.model.ChatMessageEntity;
 import com.taskmanager.notification.repository.ChatMessageRepository;
 import com.taskmanager.account.adapter.out.repository.UserRepository;
-import com.google.firebase.messaging.AndroidConfig; // ★★★ 新增 ★★★
-import com.google.firebase.messaging.AndroidNotification; // ★★★ 新增 ★★★
+import com.google.firebase.messaging.AndroidConfig; // ★★★ 必須引入 ★★★
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,7 +68,7 @@ public class NotificationService {
         repository.markMessagesAsRead(sender, receiver);
     }
 
-    // ★★★ [Push] 改良版：加入 Android High Priority 設定 ★★★
+    // ★★★ [Push] 實作 Line 風格推播 (Data Message + High Priority) ★★★
     public void sendPushNotification(ChatMessage message) {
         try {
             userRepository.findByUsername(message.getReceiver()).ifPresent(user -> {
@@ -81,7 +80,7 @@ public class NotificationService {
                     String title = "新訊息來自 " + message.getSender();
                     String body = message.getContent();
 
-                    // 針對通話信令的特殊文字處理
+                    // 通話相關的特殊標題
                     if ("OFFER".equals(message.getType())) {
                         title = "來電通知";
                         body = message.getSender() + " 邀請您進行視訊通話...";
@@ -92,17 +91,17 @@ public class NotificationService {
 
                     Message fcmMessage = Message.builder()
                             .setToken(token)
-                            // 1. Data 區塊 (前端 SW 讀取用)
+                            // 1. Data 區塊 (前端邏輯用)
                             .putData("title", title)
                             .putData("body", body)
                             .putData("sender", message.getSender())
                             .putData("type", message.getType())
 
-                            // 2. ★★★ Android 專用設定 (關鍵) ★★★
-                            // 設定 priority 為 HIGH，確保手機在休眠(Doze)模式下也能立刻收到並執行 Service Worker
+                            // 2. ★★★ Android 系統設定 (關鍵) ★★★
+                            // Priority.HIGH 是讓「持續震動」不被系統切斷的關鍵
                             .setAndroidConfig(AndroidConfig.builder()
                                     .setPriority(AndroidConfig.Priority.HIGH)
-                                    .setTtl(0) // 0 代表即時傳送，過期不候 (適合通話)
+                                    .setTtl(0) // 即時傳送，過期就丟掉 (適合通話)
                                     .build())
                             .build();
 
