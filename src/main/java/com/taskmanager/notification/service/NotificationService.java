@@ -4,6 +4,8 @@ import com.taskmanager.notification.dto.ChatMessage;
 import com.taskmanager.notification.model.ChatMessageEntity;
 import com.taskmanager.notification.repository.ChatMessageRepository;
 import com.taskmanager.account.adapter.out.repository.UserRepository;
+import com.google.firebase.messaging.AndroidConfig; // ★★★ 新增 ★★★
+import com.google.firebase.messaging.AndroidNotification; // ★★★ 新增 ★★★
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,13 +42,10 @@ public class NotificationService {
         message.setTime(LocalDateTime.now().toString());
         saveMessage(message);
 
-        // 1. 透過 WebSocket 發送給接收者 (線上時即時收到)
         messagingTemplate.convertAndSendToUser(message.getReceiver(), "/queue/messages", message);
-
-        // 2. 同步發送給寄件者自己 (Echo)
         messagingTemplate.convertAndSendToUser(message.getSender(), "/queue/messages", message);
 
-        // 3. 觸發 FCM 推播 (離線或背景時收到)
+        // 發送高優先級推播
         sendPushNotification(message);
     }
 
@@ -70,10 +69,9 @@ public class NotificationService {
         repository.markMessagesAsRead(sender, receiver);
     }
 
-    // ★★★ [Push] 公開方法：發送 Data Message 推播 ★★★
+    // ★★★ [Push] 改良版：加入 Android High Priority 設定 ★★★
     public void sendPushNotification(ChatMessage message) {
         try {
-            // 查詢接收者的 FCM Token
             userRepository.findByUsername(message.getReceiver()).ifPresent(user -> {
                 String token = user.getFcmToken();
 
@@ -83,7 +81,7 @@ public class NotificationService {
                     String title = "新訊息來自 " + message.getSender();
                     String body = message.getContent();
 
-                    // ★★★ 特殊處理通話信令的顯示文字 ★★★
+                    // 針對通話信令的特殊文字處理
                     if ("OFFER".equals(message.getType())) {
                         title = "來電通知";
                         body = message.getSender() + " 邀請您進行視訊通話...";
@@ -92,19 +90,25 @@ public class NotificationService {
                         body = "未接來電";
                     }
 
-                    // 使用 Data Message (putData) 而非 Notification
-                    // 這樣前端 Service Worker 才能完全控制震動模式
                     Message fcmMessage = Message.builder()
                             .setToken(token)
+                            // 1. Data 區塊 (前端 SW 讀取用)
                             .putData("title", title)
                             .putData("body", body)
                             .putData("sender", message.getSender())
-                            .putData("type", message.getType()) // 關鍵：前端依此判斷震動邏輯
+                            .putData("type", message.getType())
+
+                            // 2. ★★★ Android 專用設定 (關鍵) ★★★
+                            // 設定 priority 為 HIGH，確保手機在休眠(Doze)模式下也能立刻收到並執行 Service Worker
+                            .setAndroidConfig(AndroidConfig.builder()
+                                    .setPriority(AndroidConfig.Priority.HIGH)
+                                    .setTtl(0) // 0 代表即時傳送，過期不候 (適合通話)
+                                    .build())
                             .build();
 
                     try {
-                        FirebaseMessaging.getInstance().send(fcmMessage);
-                        System.out.println("推播發送成功");
+                        String response = FirebaseMessaging.getInstance().send(fcmMessage);
+                        System.out.println("推播發送成功, ID: " + response);
                     } catch (Exception e) {
                         System.err.println("推播發送失敗: " + e.getMessage());
                         e.printStackTrace();
@@ -120,7 +124,6 @@ public class NotificationService {
         if ("TYPING".equals(dto.getType()) || "READ".equals(dto.getType())) {
             return;
         }
-
         ChatMessageEntity entity = new ChatMessageEntity();
         entity.setSender(dto.getSender());
         entity.setReceiver(dto.getReceiver());
@@ -128,7 +131,6 @@ public class NotificationService {
         entity.setType(dto.getType());
         entity.setTimestamp(LocalDateTime.now());
         entity.setRead(false);
-
         repository.save(entity);
     }
 
