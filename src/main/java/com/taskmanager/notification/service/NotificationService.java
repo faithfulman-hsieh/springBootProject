@@ -6,7 +6,6 @@ import com.taskmanager.notification.repository.ChatMessageRepository;
 import com.taskmanager.account.adapter.out.repository.UserRepository;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
-// 注意：這裡不需要 import Notification 了，因為我們改用 Data Message
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -41,13 +40,13 @@ public class NotificationService {
         message.setTime(LocalDateTime.now().toString());
         saveMessage(message);
 
-        // 透過 WebSocket 發送給接收者
+        // 1. 透過 WebSocket 發送給接收者 (線上時即時收到)
         messagingTemplate.convertAndSendToUser(message.getReceiver(), "/queue/messages", message);
 
-        // 同步發送給寄件者自己 (Echo)
+        // 2. 同步發送給寄件者自己 (Echo)
         messagingTemplate.convertAndSendToUser(message.getSender(), "/queue/messages", message);
 
-        // ★★★ [Push] 觸發 FCM 推播 ★★★
+        // 3. 觸發 FCM 推播 (離線或背景時收到)
         sendPushNotification(message);
     }
 
@@ -71,37 +70,45 @@ public class NotificationService {
         repository.markMessagesAsRead(sender, receiver);
     }
 
-    // ★★★ [Push] 實作推播發送邏輯 (改為 Data Message) ★★★
-    private void sendPushNotification(ChatMessage message) {
+    // ★★★ [Push] 公開方法：發送 Data Message 推播 ★★★
+    public void sendPushNotification(ChatMessage message) {
         try {
-            // 1. 查詢接收者的 FCM Token
+            // 查詢接收者的 FCM Token
             userRepository.findByUsername(message.getReceiver()).ifPresent(user -> {
                 String token = user.getFcmToken();
 
                 if (token != null && !token.isEmpty()) {
-                    System.out.println("準備發送推播給: " + message.getReceiver());
+                    System.out.println("準備發送推播給: " + message.getReceiver() + " (Type: " + message.getType() + ")");
 
-                    // 2. 建構 Firebase 訊息 (使用 Data Message)
-                    // 關鍵修改：不使用 .setNotification()，而是將標題與內容放入 putData
-                    // 這樣前端 Service Worker 才能完全控制震動與通知行為
+                    String title = "新訊息來自 " + message.getSender();
+                    String body = message.getContent();
+
+                    // ★★★ 特殊處理通話信令的顯示文字 ★★★
+                    if ("OFFER".equals(message.getType())) {
+                        title = "來電通知";
+                        body = message.getSender() + " 邀請您進行視訊通話...";
+                    } else if ("HANGUP".equals(message.getType())) {
+                        title = "通話結束";
+                        body = "未接來電";
+                    }
+
+                    // 使用 Data Message (putData) 而非 Notification
+                    // 這樣前端 Service Worker 才能完全控制震動模式
                     Message fcmMessage = Message.builder()
                             .setToken(token)
-                            .putData("title", "新訊息來自 " + message.getSender())
-                            .putData("body", message.getContent())
+                            .putData("title", title)
+                            .putData("body", body)
                             .putData("sender", message.getSender())
-                            .putData("type", message.getType())
+                            .putData("type", message.getType()) // 關鍵：前端依此判斷震動邏輯
                             .build();
 
-                    // 3. 發送
                     try {
-                        String response = FirebaseMessaging.getInstance().send(fcmMessage);
-                        System.out.println("推播發送成功, ID: " + response);
+                        FirebaseMessaging.getInstance().send(fcmMessage);
+                        System.out.println("推播發送成功");
                     } catch (Exception e) {
                         System.err.println("推播發送失敗: " + e.getMessage());
                         e.printStackTrace();
                     }
-                } else {
-                    System.out.println("使用者 " + message.getReceiver() + " 沒有 FCM Token，跳過推播");
                 }
             });
         } catch (Exception e) {

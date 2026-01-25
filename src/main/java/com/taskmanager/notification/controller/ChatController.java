@@ -31,10 +31,6 @@ public class ChatController {
         this.messagingTemplate = messagingTemplate;
     }
 
-    // ==========================================
-    //  WebSocket Endpoints (STOMP)
-    // ==========================================
-
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage chatMessage) {
         notificationService.sendGlobalMessage(chatMessage);
@@ -66,20 +62,25 @@ public class ChatController {
         }
     }
 
+    // ★★★ [Push] 修改：WebRTC 信令處理 ★★★
     @MessageMapping("/chat.signal")
     public void signal(@Payload ChatMessage message) {
         if (message.getReceiver() != null && !message.getReceiver().isEmpty()) {
+
+            // 1. 優先透過 WebSocket 即時轉發
             messagingTemplate.convertAndSendToUser(
                     message.getReceiver(),
                     "/queue/signal",
                     message
             );
+
+            // 2. 如果是關鍵信令 (來電 OFFER / 掛斷 HANGUP)，觸發 FCM 推播
+            // 這樣即使對方在背景或手機休眠，也能收到震動通知
+            if ("OFFER".equals(message.getType()) || "HANGUP".equals(message.getType())) {
+                notificationService.sendPushNotification(message);
+            }
         }
     }
-
-    // ==========================================
-    //  REST Endpoints (HTTP)
-    // ==========================================
 
     @GetMapping("/api/chat/public-history")
     public ResponseEntity<List<ChatMessage>> getPublicHistory() {
@@ -102,16 +103,13 @@ public class ChatController {
         return ResponseEntity.ok(notificationService.getUnreadCount(contact, currentUser));
     }
 
-    // ★★★ [即時已讀回執] 修改：標記已讀後，通知發送者 ★★★
     @PostMapping("/api/chat/read/{contact}")
     public ResponseEntity<Void> markAsRead(
             @PathVariable String contact,
             Authentication authentication) {
         String currentUser = authentication.getName();
-        // 1. 更新資料庫狀態
         notificationService.markAsRead(contact, currentUser);
 
-        // 2. 發送即時通知給「原訊息發送者 (contact)」
         ChatMessage readReceipt = new ChatMessage();
         readReceipt.setType("READ");
         readReceipt.setSender(currentUser);
