@@ -51,7 +51,9 @@ public class WebSecurityConfig {
                         // /error: 錯誤轉發路徑必須公開
                         // /keep-alive: 健康檢查
                         // ★★★ 新增：/ws/** WebSocket 端點開放 ★★★
-                        .requestMatchers("/api/login", "/api/auth/**", "/keep-alive", "/error", "/ws/**").permitAll()
+                        .requestMatchers("/api/login", "/api/auth/**", "/keep-alive", "/error", "/ws/**",
+                                // ★★★ Google Calendar PoC — 暫時公開 ★★★
+                                "/api/calendar/**").permitAll()
 
                         // ★★★ 2. Swagger 文件 (Swagger UI) ★★★
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
